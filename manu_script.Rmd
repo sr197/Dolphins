@@ -23,6 +23,11 @@ library(ggthemes)
 library(wesanderson)
 library(ggpubr)
 library(pROC)
+library(ggsci)
+library(gridExtra)
+library(cowplot)
+library(lessR)
+library(ggcorrplot)
 world <- ne_countries(scale = "medium", returnclass = "sf")
 
 remove_outliers <- function(df, cols = names(df)) {
@@ -119,8 +124,8 @@ we have to make a new dataset (above we joined by season to have enough data) we
 This joins the dolphin data with seamap and NEFSC data (monthly)
 ```{r}
 dolphin_table <- read.csv("Data/dolphin_table.csv")
-load("~/Documents/ClimateOceanPlanning/overlap/Overlap_exploration/NMFS data/NEFSC_BTS_2021_all_seasons.RData")
-load("~/Documents/ClimateOceanPlanning/overlap/Overlap_exploration/NMFS data/stratum.area.RData")
+load("Data/NEFSC_BTS_2021_all_seasons.RData")
+load("Data/stratum.area.RData")
 fish_table <- survey$survdat
 #this is monthly cpue (wtcpue)
 
@@ -513,10 +518,11 @@ pa <- ggplot(data = world) + geom_sf() + geom_point(data = subset(both, both$Abd
 ggsave(filename= "Figures/Figure1_stocks.jpg", plot=pa, width = 10, height=10, units=c("cm"), dpi=500)
 
 both %>% filter(AbdPerArea > 0 & coords.x2.x > 35.2) %>% group_by(ecotype) %>% tally()
+both %>% filter(coords.x2.x > 35.2) %>% group_by(ecotype) %>% tally()
 
 pb <- ggplot(data = world) + geom_sf() + geom_point(data = subset(both,  both$AbdPerArea > 0 & both$coords.x2.x > 35.2), aes(x = coords.x1.x, y = coords.x2.x, shape = as.factor(month), colour = ecotype), size = 1) +
     coord_sf(xlim=c(-78, -65), ylim=c(35,43), expand = TRUE) +
-  scale_color_manual(labels = c("coastal (NMS, n = 21)", "either (n = 16)", "offshore (n = 38)"), values = c("#B22102", "#FBBD02", "#01C7E3")) + theme(panel.background = element_rect(fill = "white", colour = "black"))+ labs(y = element_blank(),x = element_blank())+ theme(legend.position="bottom")+ theme(legend.title = element_blank())+ guides(colour = guide_legend(override.aes = list(size=4), nrow = 2))
+  scale_color_manual(labels = c("coastal (n = 21,)", "either (n = 16,)", "offshore (n = 38,)"), values = c("#B22102", "#FBBD02", "#01C7E3")) + theme(panel.background = element_rect(fill = "white", colour = "black"))+ labs(y = element_blank(),x = element_blank())+ theme(legend.position="bottom")+ theme(legend.title = element_blank())+ guides(colour = guide_legend(override.aes = list(size=4), nrow = 2))
 
 ggsave(filename= "Figures/Figure1_north.jpg", plot=pb, width = 15, height=10, units=c("cm"), dpi=500)
 
@@ -526,7 +532,7 @@ p1 <- ggplot(data = world) + geom_sf() + geom_point(data = dolphin_table, aes(x 
 
 pb <- ggplot(data = world) + geom_sf() + geom_point(data = subset(both,  both$AbdPerArea > 0 & both$coords.x2.x > 35.2), aes(x = coords.x1.x, y = coords.x2.x, shape = as.factor(month), colour = ecotype), size = 1) +
     coord_sf(xlim=c(-78, -65), ylim=c(35,43), expand = TRUE) +
-  scale_color_manual(labels = c("coastal (NMS, n = 21)", "either (n = 16)", "offshore (n = 38)"), values = c("#B22102", "#FBBD02", "#01C7E3")) + theme(panel.background = element_rect(fill = "white", colour = "black"))+ labs(y = element_blank(),x = element_blank())+ theme(legend.position="bottom")+ theme(legend.title = element_blank(), legend.box = "vertical", legend.box.margin=margin(1,1,1,1))+ guides(colour = guide_legend(override.aes = list(size=4), nrow = 1), shape = guide_legend(override.aes = list(size=2), nrow = 1))
+  scale_color_manual(labels = c("coastal (n = 21/143)", "either (n = 16/296)", "offshore (n = 38/1392)"), values = c("#B22102", "#FBBD02", "#01C7E3")) + theme(panel.background = element_rect(fill = "white", colour = "black"))+ labs(y = element_blank(),x = element_blank())+ theme(legend.position="bottom")+ theme(legend.title = element_blank(), legend.box = "vertical", legend.box.margin=margin(1,1,1,1))+ guides(colour = guide_legend(override.aes = list(size=4), nrow = 1), shape = guide_legend(override.aes = list(size=2), nrow = 1))
 
 p3 <- ggarrange(p1,pb, nrow = 1, labels = c("a)","b)"))
 
@@ -581,13 +587,13 @@ xnames2 <- c("AbdPerArea", xnames)
 both_subset1 <- coastal[,xnames2]
 both_subset1 <- both_subset1 %>% drop_na()
 
-fit <- cforest(AbdPerArea ~ . , data=both_subset1)
+fit <- cforest(AbdPerArea ~ . , data=both_subset1, control = cforest_unbiased(ntree= 500))
 i <- varimp(fit, conditional = TRUE)
 i  <- as.data.frame(i )
 i $variables <- rownames(i )
 
 coastal_dev <- left_join(coastal_dev, i, by = c("names" = "variables")) 
-coastal_dev <- coastal_dev %>% rename(importance = i)
+coastal_dev <- coastal_dev %>% dplyr::rename(importance = i)
 
 #correlation in the data - add in x
 xnames2 <- c("AbdPerArea", xnames)
@@ -647,13 +653,13 @@ xnames2 <- c("AbdPerArea", xnames)
 both_subset1 <- offshore[,xnames2]
 both_subset1 <- both_subset1 %>% drop_na()
 
-fit <- cforest(AbdPerArea ~ . , data=both_subset1)
+fit <- cforest(AbdPerArea ~ . , data=both_subset1, control = cforest_unbiased(ntree= 500))
 i2 <- varimp(fit, conditional = TRUE)
 i2  <- as.data.frame(i2 )
 i2 $variables <- rownames(i2 )
 
 offshore_dev <- left_join(offshore_dev, i2, by = c("names" = "variables"))
-offshore_dev <- offshore_dev %>% rename(importance = i2)
+offshore_dev <- offshore_dev %>% dplyr::rename(importance = i2)
 
 
 #correlation in the data - add in x
@@ -683,12 +689,12 @@ grid.arrange(dev_plot, imp_plot, nrow = 1)
 
 ```
 
-gjam it 
+###gjam it 
 
 ```{r}
 xdata_coastal <- coastal %>% dplyr::select(SST, SSAL, depth, month)
 ydata_coastal <- coastal %>% dplyr::select(specs, AbdPerArea)
-ydata_coastal <- ydata_coastal[,colSums(ydata_coastal != 0) > 18] # I want non-zero rows 
+ydata_coastal <- ydata_coastal[,colSums(ydata_coastal != 0) > 17] # I want non-zero rows 
 
  ml <- list(ng = 20000, burnin = 8000, typeNames = 'CA')
 
@@ -704,11 +710,13 @@ ydata_offshore <- offshore %>% dplyr::select(specs, AbdPerArea)
 ydata_offshore <- ydata_offshore[,colSums(ydata_offshore != 0) > 30] # I want non-zero rows 
 ydata_offshore$AbdPerArea <- offshore$AbdPerArea
 
- ml <- list(ng = 20000, burnin = 8000, typeNames = 'CA')
+ ml <- list(ng = 600000, burnin = 50000, typeNames = 'CA')
 
  modo <- gjam(~ SST + SSAL + depth + month, xdata = xdata_offshore, ydata = ydata_offshore, modelList = ml) #removed effort 
  
  save(modo, file='Models/dolphin_modo_NC.Rdata')
+ plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/NCoffshore')
+gjamPlot(modo, plotPars=plotPars)
 
  load('Models/dolphin_modo_NC.Rdata')
  load('Models/dolphin_modi_NC.Rdata')
@@ -758,10 +766,141 @@ specs_all_dev1 <- specs_all_dev[-1]
 
 
 ```
-+ 
-  scale_fill_manual(values=c("drums"="#ff800e", "ground sharks" = "#8ab8e3", "squaliformes"= "#8ab8e3", "herrings and anchovys"="#006ba4", 
-"cutlassfishes"="#097969", "decadopds" = "#595959", "flatfishes" = "#5f9ed1", "grinners" = "#c85200", "barracudas" = "#8ab8e3", "groupers" = "#ffbc79", "rays" = "#873f0e", "scorpionfishes and flatheads" = "#98FB98", "porgies" = "#097969"))
-  
+
+
+###plotgjam
+```{r}
+out <- modi
+betas <- out$parameters$betaStandXTable
+sens <- out[["parameters"]][["sensTable"]]
+rmsetot <- out[["fit"]][["rmspeAll"]]
+DIC <- out[["fit"]][["DIC"]]
+rmse_byspec <- out[["fit"]][["rmspeBySpec"]] 
+cor <- out[["parameters"]][["corMu"]] #residual
+colnames(cor) <- colnames(out[["parameters"]][["corSe"]])
+s_mat <- out[["parameters"]][["sigMu"]]
+#add cor from ydata for panel A
+ycor <- out[["inputs"]][["y"]]
+
+#BLACK.SEA.BASS, CLEARNOSE.SKATE, SMOOTH.DOGFISH, SANDBAR.SHARK, SPOTTED.HAKE, ATLANTIC.SHARPNOSE.SHARK, ATLANTIC.MOONFISH, BLUNTNOSE.STINGRAY, SOUTHERN.KINGFISH, ATLANTIC.CROAKER, WEAKFISH, AbdPerArea, SHEEPSHEAD, STAR.DRUM, ATLANTIC.BRIEF.SQUID, BLACKNOSE.SHARK, SILVER.HAKE, SPINY.DOGFISH
+
+cor <- corReorder(cor, order = "manual", vars=c(BAY.ANCHOVY, SPOTTED.HAKE, SMOOTH.DOGFISH, BLACK.SEA.BASS, LADY.CRAB, BULLNOSE.RAY, NORTHERN.SEAROBIN, BUTTERFISH, SPOT, BLUEFISH, STRIPED.SEAROBIN, STRIPED.ANCHOVY, WEAKFISH, NORTHERN.PUFFER, ATLANTIC.CROAKER, AbdPerArea, CLEARNOSE.SKATE, SUMMER.FLOUNDER, SMALLMOUTH.FLOUNDER, WINDOWPANE, ATLANTIC.SILVERSIDE, BLUEBACK.HERRING, SPINY.DOGFISH, WINTER.SKATE, ATLANTIC.ROCK.CRAB, ATLANTIC.MACKEREL, SILVER.HAKE))
+
+cor <-  as.data.frame(cor) 
+rownames(cor) <- colnames(cor)
+
+
+s_mat <- corReorder(s_mat, order = "manual", vars=c(BAY.ANCHOVY, SPOTTED.HAKE, SMOOTH.DOGFISH, BLACK.SEA.BASS, LADY.CRAB, BULLNOSE.RAY, NORTHERN.SEAROBIN, BUTTERFISH, SPOT, BLUEFISH, STRIPED.SEAROBIN, STRIPED.ANCHOVY, WEAKFISH, NORTHERN.PUFFER, ATLANTIC.CROAKER, AbdPerArea, CLEARNOSE.SKATE, SUMMER.FLOUNDER, SMALLMOUTH.FLOUNDER, WINDOWPANE, ATLANTIC.SILVERSIDE, BLUEBACK.HERRING, SPINY.DOGFISH, WINTER.SKATE, ATLANTIC.ROCK.CRAB, ATLANTIC.MACKEREL, SILVER.HAKE))
+
+s_mat <-  as.data.frame(s_mat) 
+rownames(s_mat) <- colnames(s_mat)
+
+ggcorrplot::ggcorrplot(s_mat, type = "lower")+ scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0), limit=c(-10, 10)) + theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))+ scale_x_discrete(breaks = NULL)
+
+
+ycor <- cor(ycor, method = "spearman")
+ycor <- corReorder(ycor, order = "manual", vars=c(BAY.ANCHOVY, SPOTTED.HAKE, SMOOTH.DOGFISH, BLACK.SEA.BASS, LADY.CRAB, BULLNOSE.RAY, NORTHERN.SEAROBIN, BUTTERFISH, SPOT, BLUEFISH, STRIPED.SEAROBIN, STRIPED.ANCHOVY, WEAKFISH, NORTHERN.PUFFER, ATLANTIC.CROAKER, AbdPerArea, CLEARNOSE.SKATE, SUMMER.FLOUNDER, SMALLMOUTH.FLOUNDER, WINDOWPANE, ATLANTIC.SILVERSIDE, BLUEBACK.HERRING, SPINY.DOGFISH, WINTER.SKATE, ATLANTIC.ROCK.CRAB, ATLANTIC.MACKEREL, SILVER.HAKE))
+ # ycor <- ifelse(ycor > .01, .01, ycor)
+ # ycor <- ifelse(ycor < -.01, -.01, ycor)
+
+ycor <-  as.data.frame(ycor) 
+rownames(ycor) <- colnames(ycor)
+
+
+cor2 <- out[["parameters"]][["ematrix"]]
+cor2 <- corReorder(cor2, order = "manual", vars=c(BAY.ANCHOVY, SPOTTED.HAKE, SMOOTH.DOGFISH, BLACK.SEA.BASS, LADY.CRAB, BULLNOSE.RAY, NORTHERN.SEAROBIN, BUTTERFISH, SPOT, BLUEFISH, STRIPED.SEAROBIN, STRIPED.ANCHOVY, WEAKFISH, NORTHERN.PUFFER, ATLANTIC.CROAKER, AbdPerArea, CLEARNOSE.SKATE, SUMMER.FLOUNDER, SMALLMOUTH.FLOUNDER, WINDOWPANE, ATLANTIC.SILVERSIDE, BLUEBACK.HERRING, SPINY.DOGFISH, WINTER.SKATE, ATLANTIC.ROCK.CRAB, ATLANTIC.MACKEREL, SILVER.HAKE))
+# cor2 <- ifelse(cor2 > 1, 1, cor2)
+# cor2 <- ifelse(cor2 < -1, -1, cor2)
+cor2 <-  as.data.frame(cor2) 
+rownames(cor2) <- colnames(cor2)
+
+
+cl<- c("#56A36C","#5E8579","#77C34F","#2E68AA","#7E884F","#7C8489","#4fB3A4","#F5B977")
+
+col2 <- colorRampPalette(cl)
+
+cor <- as.matrix(cor)
+# cor <- ifelse(cor > .5, .5, cor)
+# cor <- ifelse(cor < -.5, -.5, cor)
+
+
+
+#co-occurence in ydata 
+cooccur <- ggcorrplot::ggcorrplot(ycor, type = "lower")+ scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0), limit=c(-1, 1))+ theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1), panel.grid.major.x = element_blank())
+
+#co-occurence modeled
+comodel <- ggcorrplot::ggcorrplot(cor, type = "lower")+ scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0), limit=c(-1, 1))+ theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1), panel.grid.major.x = element_blank())
+#ematrix
+
+emat <- ggcorrplot::ggcorrplot(cor2, type = "lower") + scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0))+ theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1), panel.grid.major.x = element_blank()) 
+
+
+betas_tidy <- betas 
+betas_tidy$variable <- rownames(betas_tidy)
+betas_tidy <- betas_tidy %>% separate(variable, c("species","variable"), sep = "([_])")
+
+betas_tidy$species <- factor(betas_tidy$species, levels=c("BAY.ANCHOVY", "SPOTTED.HAKE", "SMOOTH.DOGFISH", "BLACK.SEA.BASS", "LADY.CRAB", "BULLNOSE.RAY", "NORTHERN.SEAROBIN", "BUTTERFISH", "SPOT", "BLUEFISH", "STRIPED.SEAROBIN", "STRIPED.ANCHOVY", "WEAKFISH", "NORTHERN.PUFFER", "ATLANTIC.CROAKER", "AbdPerArea", "CLEARNOSE.SKATE", "SUMMER.FLOUNDER", "SMALLMOUTH.FLOUNDER", "WINDOWPANE", "ATLANTIC.SILVERSIDE", "BLUEBACK.HERRING", "SPINY.DOGFISH", "WINTER.SKATE", "ATLANTIC.ROCK.CRAB", "ATLANTIC.MACKEREL", "SILVER.HAKE"))
+
+betas_tidy <- betas_tidy %>% filter(variable != "intercept")
+
+# betas_tidy$variable <- factor(betas_tidy$variable, levels=c("SST","SSAL"))
+
+
+# 
+ betas_tidy$Estimate <- ifelse(betas_tidy$Estimate > 2, 2, betas_tidy$Estimate)
+ betas_tidy$Estimate <- ifelse(betas_tidy$Estimate < -2,-2, betas_tidy$Estimate)
+
+betaplot <- ggplot(data = betas_tidy, aes(x=variable, y=species, fill=Estimate)) + 
+  geom_tile() + scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, space = "Lab", 
+   name="Betas") + theme(axis.text.x = element_text(angle = 90, size = 15, vjust = 1, hjust = 1), axis.text.y = element_text(size = 15))
+
+cooccur
+comodel
+emat
+betaplot
+
+
+ prow <- plot_grid(betaplot + 
+             theme(legend.position="none")+ 
+             theme(axis.title.x = element_blank()) + 
+                  theme(axis.title.y = element_blank())+ 
+                  ggtitle("a) Environmental Response") +
+                 theme( plot.title = element_text(hjust = 0.5)) +
+                theme( plot.title = element_text(size = 30, face = "bold")),
+             emat + 
+             theme(legend.position="none")+ 
+                  ggtitle("b) Covariance or E-matrix") +
+                  theme( plot.title = element_text(hjust = 0.5)) +
+                         theme( plot.title = element_text(size = 30, face = "bold")),
+             cooccur + 
+                     theme(legend.position="none") + 
+                     ggtitle("c) Co-occurence in Data")+ 
+                     theme( plot.title = element_text(hjust = 0.5)) + 
+                      theme( plot.title = element_text(size = 30, face = "bold")),
+           comodel + 
+             theme(legend.position="none")+ 
+              ggtitle("d) Residual Correlation") +
+              theme( plot.title = element_text(hjust = 0.5)) +
+               theme( plot.title = element_text(size = 30, face = "bold")),
+           align = 'vh',
+           nrow = 2
+           )
+
+# extract the legend from one of the plots
+# (clearly the whole thing only makes sense if all plots
+# have the same legend, so we can arbitrarily pick one.)
+legend_b <- get_legend(cooccur + theme(legend.position="bottom") + theme(legend.title = element_blank(), legend.text = element_blank()) +
+  theme(legend.key.height= unit(2, 'cm'),
+        legend.key.width= unit(4, 'cm')))
+
+# add the legend underneath the row we made earlier. Give it 10% of the height
+# of one plot (via rel_heights).
+p <- plot_grid( prow, legend_b, ncol = 1, rel_heights = c(1, .2))
+p
+ggsave(filename= "Figures/supp_gjam_coastal.jpg", plot=p, width = 50, height=50, units=c("cm"), dpi=500)
+
+```
   
 ##plotit 
 ```{r}
@@ -874,7 +1013,10 @@ coastal_table <- coastal_table %>% dplyr::filter(names %in% coastal_specs) %>% d
 coastal_table[2:9] <- round(coastal_table[2:9], digits = 3)
 
 
-write.csv(coastal_table, "coastal_table.csv")
+colnames(coastal_table) <- c("Names", "p-value (glm)", "coefficient (glm)", "deviance (glm)", "aic (glm)", "importance (cforest)", "spearman (data)", "Env covariance", "residual correlation", "species order")
+
+
+write.csv(coastal_table, "coastal_table.csv",na="")
 
 ```
 
@@ -882,193 +1024,7 @@ write.csv(coastal_table, "coastal_table.csv")
 ##predictions
 
 
-###conditional 
-just strong cov 
-```{r}
-#try just positives 
-specs1 <- cor2 %>% filter(AbdPerArea > .2)
-specs2 <- cor %>% filter(AbdPerArea > .2)
-specs1 <- specs1$specs
-specs2 <- specs2$specs
 
-specs1 <- c(specs1, specs2)
-specs1 <- unique(specs1)
-
-ynames <- c("RED.DRUM", "SPOT", "ATLANTIC.CROAKER",  "WEAKFISH", "SILVER.PERCH", "BANDED.DRUM", "STRIPED.ANCHOVY", "SPINY.DOGFISH")
-specs1 <- ynames
-
-xdata_coastal <- coastal %>% dplyr::select(SST, SSAL, depth, month)
-ydata_coastal <- coastal %>% dplyr::select(specs1, AbdPerArea)
-ydata_coastal <- ydata_coastal[,colSums(ydata_coastal != 0) > 17] # I want non-zero rows 
-
- ml <- list(ng = 20000, burnin = 8000, typeNames = 'CA')
-
- mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_coastal, ydata = ydata_coastal, modelList = ml) #removed effort 
- 
- save(mod2, file='Models/dolphin_coastal_2.Rdata')
-plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
-gjamPlot(mod2, plotPars=plotPars)
-
-# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
-# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
-# gjamPlot(mod_spring, plotPars=plotPars)
-
-
-
-ycond <- ydata_coastal[,colnames(ydata_coastal) %!in% "AbdPerArea"]
-
-
-newdata1 <- list(xdata = xdata_coastal, ydataCond = ycond, nsim = 1000) # conditionally predict in-sample
-
-p6      <- gjamPredict(mod2, newdata = newdata1)
-pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
-obs_dolph <- ydata_coastal[,colnames(ydata_coastal) %in% "AbdPerArea"]#observed dolph
-colnames(obs_dolph) <- "obs_dolph"
-
-newdata <- list(xdata = xdata_coastal, nsim = 1000) # unconditionally prediction- in-sample
-
-p7      <- gjamPredict(mod2, newdata = newdata)
-pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
-pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
-
-dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
-
-dat <- as.data.frame(dat)
-
-r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
-r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
-rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
-rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
-rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
-
-rmse_con_fall #from conditonal
-rmse_uncon_fall #from gjam predict
-rmse_uncon2_fall #from gjam
-
-sub <- paste("R2 =", round(r2_con_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-
-p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
-
-sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
-    
-p <- grid.arrange(p1, p2, nrow = 1)
-ggsave(filename= "Figures/cond_uncond_smaller.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
-
-
-
-```
-
-
-
-###out of sample
-
-```{r}
-
-smp_size <- floor(0.70 * nrow(coastal))
-set.seed(321)
-train_ind <- sample(seq_len(nrow(coastal)), size = smp_size)
-train <- coastal[train_ind, ]
-test <- coastal[-train_ind, ]
-
-ynames <- c(specs1, "AbdPerArea")
-ydata_train <- train[,colnames(train) %in% ynames]
-xdata_train <- train %>% dplyr::select(SST, SSAL, depth, month)
-ydata_train <- ydata_train[,colSums(ydata_train != 0) > 5] # I want non-zero rows 
-ynames <- colnames(ydata_train)
-
- ml <- list(ng = 20000, burnin = 8000, typeNames = 'CA')
-
- mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_train, ydata = ydata_train, modelList = ml) #removed effort 
- 
- save(mod2, file='Models/dolphin_coastal_3.Rdata')
-plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
-#gjamPlot(mod2, plotPars=plotPars)
-
-# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
-# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
-# gjamPlot(mod_spring, plotPars=plotPars)
-xdata_test <- test %>% dplyr::select(SST, SSAL, depth, month, region)
-ydata_test <- test[,colnames(test) %in% ynames]
-
-ycond <- ydata_test[,colnames(ydata_test) %!in% "AbdPerArea"]
-
-
-newdata1 <- list(xdata = xdata_test, ydataCond = ycond, nsim = 8000) # conditionally predict in-sample
-
-p6      <- gjamPredict(mod2, newdata = newdata1)
-pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
-obs_dolph <- ydata_test[,colnames(ydata_test) %in% "AbdPerArea"]#observed dolph
-colnames(obs_dolph) <- "obs_dolph"
-
-newdata <- list(xdata = xdata_test, nsim = 8000) # unconditionally prediction- in-sample
-
-p7      <- gjamPredict(mod2, newdata = newdata)
-pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
-pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
-
-dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
-dat <- as.data.frame(dat)
-
-r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
-r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
-rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
-rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
-rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
-
-rmse_con_fall #from conditonal
-rmse_uncon_fall #from gjam predict
-rmse_uncon2_fall #from gjam
-
-sub <- paste("R2 =", round(r2_con_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-
-p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
-
-sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
-    
-p <- grid.arrange(p1, p2, nrow = 1)
-ggsave(filename= "Figures/cond_uncond_evensmaller_out_of_sample.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
-
-
-
-```
 
 ###SSDM prediction 
 ####glm
@@ -1278,9 +1234,9 @@ ggsave(filename= "Figures/Figure3.jpg", plot=p7, width = 30, height=20, units=c(
 try some observed vs. predicted with single species models with kingfish added and not 
 ```{r}
 
-mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) , data = coastal)
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) , data = coastal, control = cforest_unbiased(ntree= 500))
 
-mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH , data = coastal)
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH , data = coastal, control = cforest_unbiased(ntree= 500))
 
 xdata <- coastal %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, RED.DRUM, SPOT, ATLANTIC.CROAKER,  WEAKFISH, SILVER.PERCH, BANDED.DRUM, STRIPED.ANCHOVY, SPINY.DOGFISH)
 xdata$month <- as.factor(xdata$month)
@@ -1339,9 +1295,9 @@ test <- test %>% dplyr::filter(month %in% train$month)
 train <- train %>% dplyr::filter(month %in% test$month)
 
 
-mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) , data = train)
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) , data = train, control = cforest_unbiased(ntree= 500))
 
-mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH , data = train)
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH , data = train, control = cforest_unbiased(ntree= 500))
 
 xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, RED.DRUM, SPOT, ATLANTIC.CROAKER,  WEAKFISH, SILVER.PERCH, BANDED.DRUM, STRIPED.ANCHOVY, SPINY.DOGFISH)
 
@@ -1398,9 +1354,9 @@ pa
 coastal_pa <- coastal
 coastal_pa$AbdPerArea <- ifelse(coastal_pa$AbdPerArea > 0, 1, 0)
 
-mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month), data = coastal_pa)
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month), data = coastal_pa, control = cforest_unbiased(ntree= 500))
 
-mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH, data = coastal_pa)
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH, data = coastal_pa, control = cforest_unbiased(ntree= 500))
 
 xdata <- coastal_pa %>% dplyr::select(SST, SSAL, BSAL, BT,depth, month, SST, SSAL, BSAL, BT,depth,  month, RED.DRUM, SPOT, ATLANTIC.CROAKER,  WEAKFISH, SILVER.PERCH, BANDED.DRUM, STRIPED.ANCHOVY, SPINY.DOGFISH)
 
@@ -1440,9 +1396,9 @@ train <- train %>% dplyr::filter(month %in% test$month)
 
 
 
-mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) , data = train)
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) , data = train, control = cforest_unbiased(ntree= 500))
 
-mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH , data = train)
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + RED.DRUM + SPOT + ATLANTIC.CROAKER + WEAKFISH + SILVER.PERCH + BANDED.DRUM + STRIPED.ANCHOVY + SPINY.DOGFISH , data = train, control = cforest_unbiased(ntree= 500))
 
 xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, RED.DRUM, SPOT, ATLANTIC.CROAKER,  WEAKFISH, SILVER.PERCH, BANDED.DRUM, STRIPED.ANCHOVY, SPINY.DOGFISH)
 xdata$month <- as.factor(xdata$month)
@@ -1476,6 +1432,319 @@ ggsave(filename= "Figures/supp_RF.jpg", plot=p7, width = 30, height=20, units=c(
 
 
 ```
+###conditional 
+just strong cov 
+```{r}
+ynames <- c("RED.DRUM", "SPOT", "ATLANTIC.CROAKER",  "WEAKFISH", "SILVER.PERCH", "BANDED.DRUM", "STRIPED.ANCHOVY", "SPINY.DOGFISH")
+specs1 <- ynames
+#try just positives 
+ynames <- c("RED.DRUM", "SPOT", "ATLANTIC.CROAKER",  "WEAKFISH", "SILVER.PERCH", "BANDED.DRUM", "STRIPED.ANCHOVY", "SPINY.DOGFISH")
+specs1 <- ynames
+
+xdata_coastal <- coastal %>% dplyr::select(SST, SSAL, depth, month)
+ydata_coastal <- coastal %>% dplyr::select(specs1, AbdPerArea)
+ydata_coastal <- ydata_coastal[,colSums(ydata_coastal != 0) > 17] # I want non-zero rows 
+
+  ml <- list(ng = 600000, burnin = 50000, typeNames = 'CA')
+
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_coastal, ydata = ydata_coastal, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_coastal_2.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+
+
+
+ycond <- ydata_coastal[,colnames(ydata_coastal) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_coastal, ydataCond = ycond, nsim = 1000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_coastal[,colnames(ydata_coastal) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_coastal, nsim = 1000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+dat <- as.data.frame(dat)
+
+r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
+r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
+rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
+rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
+rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
+
+rmse_con_fall #from conditonal
+rmse_uncon_fall #from gjam predict
+rmse_uncon2_fall #from gjam
+
+sub <- paste("R2 =", round(r2_con_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+
+p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
+
+sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
+    
+p <- grid.arrange(p2, p1, nrow = 1)
+ggsave(filename= "Figures/cond_uncond_smaller.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
+
+
+
+```
+
+out of sample
+
+```{r}
+
+smp_size <- floor(0.70 * nrow(coastal))
+set.seed(321)
+train_ind <- sample(seq_len(nrow(coastal)), size = smp_size)
+train <- coastal[train_ind, ]
+test <- coastal[-train_ind, ]
+
+ynames <- c(specs1, "AbdPerArea")
+ydata_train <- train[,colnames(train) %in% ynames]
+xdata_train <- train %>% dplyr::select(SST, SSAL, depth, month)
+ydata_train <- ydata_train[,colSums(ydata_train != 0) > 5] # I want non-zero rows 
+ynames <- colnames(ydata_train)
+
+ ml <- list(ng = 20000, burnin = 8000, typeNames = 'CA')
+
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_train, ydata = ydata_train, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_coastal_3.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+#gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+xdata_test <- test %>% dplyr::select(SST, SSAL, depth, month, region)
+ydata_test <- test[,colnames(test) %in% ynames]
+
+ycond <- ydata_test[,colnames(ydata_test) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_test, ydataCond = ycond, nsim = 8000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_test[,colnames(ydata_test) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_test, nsim = 8000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+dat <- as.data.frame(dat)
+
+r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
+r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
+rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
+rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
+rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
+
+rmse_con_fall #from conditonal
+rmse_uncon_fall #from gjam predict
+rmse_uncon2_fall #from gjam
+
+sub <- paste("R2 =", round(r2_con_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+
+p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
+
+sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
+    
+p3 <- grid.arrange(p2, p1, nrow = 1, top=textGrob("Out-of-sample"))
+
+p4 <- grid.arrange(p, p3, nrow = 2, top=textGrob("In-sample"))
+
+ggsave(filename= "Figures/cond_uncond_evensmaller_out_of_sample.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
+
+
+
+```
+
+####PA
+```{r}
+coastal_pa <- coastal
+coastal_pa$AbdPerArea <- ifelse(coastal_pa$AbdPerArea > 0, 1, 0)
+
+xdata_coastal_pa <- coastal_pa %>% dplyr::select(SST, SSAL, depth, month)
+ydata_coastal_pa <- coastal_pa %>% dplyr::select(specs1, AbdPerArea)
+ydata_coastal_pa <- ydata_coastal_pa[,colSums(ydata_coastal_pa != 0) > 17] # I want non-zero rows 
+
+ ml <- list(ng = 20000, burnin = 8000, typeNames = 'PA')
+
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_coastal_pa, ydata = ydata_coastal_pa, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_coastal_pa_2.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+
+
+
+ycond <- ydata_coastal_pa[,colnames(ydata_coastal_pa) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_coastal_pa, ydataCond = ycond, nsim = 1000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_coastal_pa[,colnames(ydata_coastal_pa) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_coastal_pa, nsim = 1000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+
+dat <- as.data.frame(dat)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_un)
+
+PAp1 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("e) Base model", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_con)
+
+PAp2 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("f) Fish added", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+  
+  
+PAp <- grid.arrange(PAp1, PAp2, nrow = 1)
+#ggsave(filename= "Figures/Kingfish_pred_outofsample_coastal_PA.jpg", plot=p, width = 10, height=5, units=c("cm"), dpi=500)
+
+
+
+```
+
+out of sample
+
+```{r}
+
+smp_size <- floor(0.70 * nrow(coastal_pa))
+set.seed(321)
+train_ind <- sample(seq_len(nrow(coastal_pa)), size = smp_size)
+train <- coastal_pa[train_ind, ]
+test <- coastal_pa[-train_ind, ]
+
+ynames <- c(specs1, "AbdPerArea")
+ydata_train <- train[,colnames(train) %in% ynames]
+xdata_train <- train %>% dplyr::select(SST, SSAL, depth, month)
+ydata_train <- ydata_train[,colSums(ydata_train != 0) > 5] # I want non-zero rows 
+ynames <- colnames(ydata_train)
+
+ ml <- list(ng = 20000, burnin = 8000, typeNames = 'PA')
+
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_train, ydata = ydata_train, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_coastal_pa_3.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+#gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+xdata_test <- test %>% dplyr::select(SST, SSAL, depth, month, region)
+ydata_test <- test[,colnames(test) %in% ynames]
+
+ycond <- ydata_test[,colnames(ydata_test) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_test, ydataCond = ycond, nsim = 8000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_test[,colnames(ydata_test) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_test, nsim = 8000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+dat <- as.data.frame(dat)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_un)
+
+PAp3 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("g) Base model", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_con)
+
+PAp4 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("h) Fish added", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+PAp5 <- grid.arrange(PAp3, PAp4, nrow = 1, top=textGrob("Out-of-sample"))
+PAp6 <- grid.arrange(PAp, PAp5, nrow = 2, top=textGrob("In-sample"))
+p7 <- grid.arrange(p4, PAp6, nrow =1)
+ggsave(filename= "Figures/supp_gjam_coastal1.jpg", plot=p7, width = 30, height=20, units=c("cm"), dpi=500)
+
+```
+
 
 #offshore 
 ```{r}
@@ -1546,6 +1815,7 @@ all_dev$order_common <- ifelse(all_dev$names %in% c("SPOTTED.SEATROUT", "SILVER.
 all_dev$order_common <- ifelse(all_dev$names == "NORTHERN.STARGAZER", "stargazers", all_dev$order_common)
 all_dev$order_common <- ifelse(all_dev$names == "COWNOSE.RAY", "rays", all_dev$order_common)
 all_dev$order_common <- ifelse(all_dev$names == "ATLANTIC.SILVERSIDE", "silversides", all_dev$order_common)
+all_dev$order_common <- ifelse(all_dev$names == "MACKEREL.SCAD", "jacks", all_dev$order_common)
 offshore_table <- all_dev
 ```
 
@@ -1607,6 +1877,139 @@ ggsave(filename= "Figures/Figure4.jpg", plot=p, width = 65, height=30, units=c("
 
 
 ```
+###plotgjam
+```{r}
+out <- modo
+betas <- out$parameters$betaStandXTable
+sens <- out[["parameters"]][["sensTable"]]
+rmsetot <- out[["fit"]][["rmspeAll"]]
+DIC <- out[["fit"]][["DIC"]]
+rmse_byspec <- out[["fit"]][["rmspeBySpec"]] 
+cor <- out[["parameters"]][["corMu"]] #residual
+colnames(cor) <- colnames(out[["parameters"]][["corSe"]])
+s_mat <- out[["parameters"]][["sigMu"]]
+#add cor from ydata for panel A
+ycor <- out[["inputs"]][["y"]]
+
+# BLUEFISH, BUTTERFISH, SMOOTH.DOGFISH, BLACK.SEA.BASS, SPOTTED.HAKE, SCLEARNOSE.SKATE, NORTHERN.SEAROBIN, ATLANTIC.ROCK.CRAB, SUMMER.FLOUNDER, AbdPerArea, ROSETTE.SKATE, COMMON.OCTOPUS, SILVER.HAKE, GOOSEFISH, SPINY.DOGFISH, SEVENSPINE.BAY.SHRIMP, ATLANTIC.MACKEREL, BLUEBACK.HERRING, AMERICAN.SHAD, WINTER.SKATE, WINDOWPANE
+
+cor <- corReorder(cor, order = "manual", vars=c(BLUEFISH, BUTTERFISH, SMOOTH.DOGFISH, BLACK.SEA.BASS, SPOTTED.HAKE, CLEARNOSE.SKATE, NORTHERN.SEAROBIN, ATLANTIC.ROCK.CRAB, SUMMER.FLOUNDER, AbdPerArea, ROSETTE.SKATE, COMMON.OCTOPUS, SILVER.HAKE, GOOSEFISH, SPINY.DOGFISH, SEVENSPINE.BAY.SHRIMP, ATLANTIC.MACKEREL, BLUEBACK.HERRING, AMERICAN.SHAD, WINTER.SKATE, WINDOWPANE))
+
+cor <-  as.data.frame(cor) 
+rownames(cor) <- colnames(cor)
+
+
+s_mat <- corReorder(s_mat, order = "manual", vars=c(BLUEFISH, BUTTERFISH, SMOOTH.DOGFISH, BLACK.SEA.BASS, SPOTTED.HAKE, CLEARNOSE.SKATE, NORTHERN.SEAROBIN, ATLANTIC.ROCK.CRAB, SUMMER.FLOUNDER, AbdPerArea, ROSETTE.SKATE, COMMON.OCTOPUS, SILVER.HAKE, GOOSEFISH, SPINY.DOGFISH, SEVENSPINE.BAY.SHRIMP, ATLANTIC.MACKEREL, BLUEBACK.HERRING, AMERICAN.SHAD, WINTER.SKATE, WINDOWPANE))
+
+s_mat <-  as.data.frame(s_mat) 
+rownames(s_mat) <- colnames(s_mat)
+
+ggcorrplot::ggcorrplot(s_mat, type = "lower")+ scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0), limit=c(-10, 10)) + theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))+ scale_x_discrete(breaks = NULL)
+
+
+ycor <- cor(ycor, method = "spearman")
+ycor <- corReorder(ycor, order = "manual", vars=c(BLUEFISH, BUTTERFISH, SMOOTH.DOGFISH, BLACK.SEA.BASS, SPOTTED.HAKE, CLEARNOSE.SKATE, NORTHERN.SEAROBIN, ATLANTIC.ROCK.CRAB, SUMMER.FLOUNDER, AbdPerArea, ROSETTE.SKATE, COMMON.OCTOPUS, SILVER.HAKE, GOOSEFISH, SPINY.DOGFISH, SEVENSPINE.BAY.SHRIMP, ATLANTIC.MACKEREL, BLUEBACK.HERRING, AMERICAN.SHAD, WINTER.SKATE, WINDOWPANE))
+ # ycor <- ifelse(ycor > .01, .01, ycor)
+ # ycor <- ifelse(ycor < -.01, -.01, ycor)
+
+ycor <-  as.data.frame(ycor) 
+rownames(ycor) <- colnames(ycor)
+
+
+cor2 <- out[["parameters"]][["ematrix"]]
+cor2 <- corReorder(cor2, order = "manual", vars=c(BLUEFISH, BUTTERFISH, SMOOTH.DOGFISH, BLACK.SEA.BASS, SPOTTED.HAKE, CLEARNOSE.SKATE, NORTHERN.SEAROBIN, ATLANTIC.ROCK.CRAB, SUMMER.FLOUNDER, AbdPerArea, ROSETTE.SKATE, COMMON.OCTOPUS, SILVER.HAKE, GOOSEFISH, SPINY.DOGFISH, SEVENSPINE.BAY.SHRIMP, ATLANTIC.MACKEREL, BLUEBACK.HERRING, AMERICAN.SHAD, WINTER.SKATE, WINDOWPANE))
+# cor2 <- ifelse(cor2 > 1, 1, cor2)
+# cor2 <- ifelse(cor2 < -1, -1, cor2)
+cor2 <-  as.data.frame(cor2) 
+rownames(cor2) <- colnames(cor2)
+
+
+cl<- c("#56A36C","#5E8579","#77C34F","#2E68AA","#7E884F","#7C8489","#4fB3A4","#F5B977")
+
+col2 <- colorRampPalette(cl)
+
+cor <- as.matrix(cor)
+# cor <- ifelse(cor > .5, .5, cor)
+# cor <- ifelse(cor < -.5, -.5, cor)
+
+
+
+#co-occurence in ydata 
+cooccur <- ggcorrplot::ggcorrplot(ycor, type = "lower")+ scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0), limit=c(-1, 1))+ theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1), panel.grid.major.x = element_blank())
+
+#co-occurence modeled
+comodel <- ggcorrplot::ggcorrplot(cor, type = "lower")+ scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0), limit=c(-1, 1))+ theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1), panel.grid.major.x = element_blank())
+#ematrix
+
+emat <- ggcorrplot::ggcorrplot(cor2, type = "lower") + scale_fill_gradient2(low = "blue", mid = "white", high = "red", breaks=c(0))+ theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1), panel.grid.major.x = element_blank()) 
+
+
+betas_tidy <- betas 
+betas_tidy$variable <- rownames(betas_tidy)
+betas_tidy <- betas_tidy %>% separate(variable, c("species","variable"), sep = "([_])")
+
+betas_tidy$species <- factor(betas_tidy$species, levels=c("BLUEFISH", "BUTTERFISH", "SMOOTH.DOGFISH", "BLACK.SEA.BASS", "SPOTTED.HAKE", "CLEARNOSE.SKATE", "NORTHERN.SEAROBIN", "ATLANTIC.ROCK.CRAB", "SUMMER.FLOUNDER", "AbdPerArea", "ROSETTE.SKATE", "COMMON.OCTOPUS", "SILVER.HAKE", "GOOSEFISH", "SPINY.DOGFISH", "SEVENSPINE.BAY.SHRIMP", "ATLANTIC.MACKEREL", "BLUEBACK.HERRING", "AMERICAN.SHAD", "WINTER.SKATE", "WINDOWPANE"))
+
+betas_tidy <- betas_tidy %>% filter(variable != "intercept")
+
+# betas_tidy$variable <- factor(betas_tidy$variable, levels=c("SST","SSAL"))
+
+
+# 
+ betas_tidy$Estimate <- ifelse(betas_tidy$Estimate > 2, 2, betas_tidy$Estimate)
+ betas_tidy$Estimate <- ifelse(betas_tidy$Estimate < -2,-2, betas_tidy$Estimate)
+
+betaplot <- ggplot(data = betas_tidy, aes(x=variable, y=species, fill=Estimate)) + 
+  geom_tile() + scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, space = "Lab", 
+   name="Betas") + theme(axis.text.x = element_text(angle = 90, size = 15, vjust = 1, hjust = 1), axis.text.y = element_text(size = 15))
+
+cooccur
+comodel
+emat
+betaplot
+
+
+ prow <- plot_grid(betaplot + 
+             theme(legend.position="none")+ 
+             theme(axis.title.x = element_blank()) + 
+                  theme(axis.title.y = element_blank())+ 
+                  ggtitle("a) Environmental Response") +
+                 theme( plot.title = element_text(hjust = 0.5)) +
+                theme( plot.title = element_text(size = 30, face = "bold")),
+             emat + 
+             theme(legend.position="none")+ 
+                  ggtitle("b) Covariance or E-matrix") +
+                  theme( plot.title = element_text(hjust = 0.5)) +
+                         theme( plot.title = element_text(size = 30, face = "bold")),
+             cooccur + 
+                     theme(legend.position="none") + 
+                     ggtitle("c) Co-occurence in Data")+ 
+                     theme( plot.title = element_text(hjust = 0.5)) + 
+                      theme( plot.title = element_text(size = 30, face = "bold")),
+           comodel + 
+             theme(legend.position="none")+ 
+              ggtitle("d) Residual Correlation") +
+              theme( plot.title = element_text(hjust = 0.5)) +
+               theme( plot.title = element_text(size = 30, face = "bold")),
+           align = 'vh',
+           nrow = 2
+           )
+
+# extract the legend from one of the plots
+# (clearly the whole thing only makes sense if all plots
+# have the same legend, so we can arbitrarily pick one.)
+legend_b <- get_legend(cooccur + theme(legend.position="bottom") + theme(legend.title = element_blank(), legend.text = element_blank()) +
+  theme(legend.key.height= unit(2, 'cm'),
+        legend.key.width= unit(4, 'cm')))
+
+# add the legend underneath the row we made earlier. Give it 10% of the height
+# of one plot (via rel_heights).
+p <- plot_grid( prow, legend_b, ncol = 1, rel_heights = c(1, .2))
+p
+ggsave(filename= "Figures/supp_gjam_offshore.jpg", plot=p, width = 50, height=50, units=c("cm"), dpi=500)
+
+```
 
 ###table 
 
@@ -1636,201 +2039,16 @@ offshore_table <- offshore_table %>% dplyr::filter(names %in% offshore_specs) %>
 
 offshore_table[2:9] <- round(offshore_table[2:9], digits = 3)
 
+colnames(offshore_table) <- c("Names", "p-value (glm)", "coefficient (glm)", "deviance (glm)", "aic (glm)", "importance (cforest)", "spearman (data)", "Env covariance", "residual correlation", "species order")
 
-write.csv(offshore_table, "offshore_table.csv")
+
+write.csv(offshore_table, "offshore_table.csv",na="")
 
 ```
 
 
 
 ##Predictions
-###conditional 
-just strong cov 
-note - this doesn't really work 
-```{r}
-#try just positives 
-specs1 <- cor2 %>% filter(AbdPerArea > .2)
-specs2 <- cor %>% filter(AbdPerArea > .2)
-specs1 <- specs1$specs
-specs2 <- specs2$specs
-
-specs1 <- c(specs1, specs2)
-specs1 <- unique(specs1)
-specs1 <- c("SPOTTED.HAKE", "ROSETTE.SKATE", "CLEARNOSE.SKATE", "SMOOTH.DOGFISH", "ROUND.HERRING", "SOUTHERN.KINGFISH", "NORTHERN.SEAROBIN", "SILVER.HAKE")
-ynames <- specs1
-
-xdata_offshore <- offshore %>% dplyr::select(SST, SSAL, depth, region, month)
-ydata_offshore <- offshore %>% dplyr::select(specs1, AbdPerArea)
-ydata_offshore <- ydata_offshore[,colSums(ydata_offshore != 0) > 50] # I want non-zero rows 
-
- ml <- list(ng = 20000, burnin = 8000, typeNames = 'CA')
-
- mod2 <- gjam(~ SST + SSAL + depth + region + month, xdata = xdata_offshore, ydata = ydata_offshore, modelList = ml) #removed effort 
- 
- save(mod2, file='Models/dolphin_offshore_2.Rdata')
-plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
-gjamPlot(mod2, plotPars=plotPars)
-
-# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
-# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
-# gjamPlot(mod_spring, plotPars=plotPars)
-
-
-
-ycond <- ydata_offshore[,colnames(ydata_offshore) %!in% "AbdPerArea"]
-
-
-newdata1 <- list(xdata = xdata_offshore, ydataCond = ycond, nsim = 1000) # conditionally predict in-sample
-
-p6      <- gjamPredict(mod2, newdata = newdata1)
-pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
-obs_dolph <- ydata_offshore[,colnames(ydata_offshore) %in% "AbdPerArea"]#observed dolph
-colnames(obs_dolph) <- "obs_dolph"
-
-newdata <- list(xdata = xdata_offshore, nsim = 1000) # unconditionally prediction- in-sample
-
-p7      <- gjamPredict(mod2, newdata = newdata)
-pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
-pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
-
-dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
-
-dat <- as.data.frame(dat)
-
-r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
-r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
-rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
-rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
-rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
-
-rmse_con_fall #from conditonal
-rmse_uncon_fall #from gjam predict
-rmse_uncon2_fall #from gjam
-
-sub <- paste("R2 =", round(r2_con_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-
-p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
-
-sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
-    
-p <- grid.arrange(p1, p2, nrow = 1)
-ggsave(filename= "Figures/cond_uncond_smaller.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
-
-
-
-```
-
-
-
-###out of sample
-
-```{r}
-
-smp_size <- floor(0.70 * nrow(offshore))
-set.seed(321)
-train_ind <- sample(seq_len(nrow(offshore)), size = smp_size)
-train <- offshore[train_ind, ]
-test <- offshore[-train_ind, ]
-
-ynames <- c(specs1, "AbdPerArea")
-ydata_train <- train[,colnames(train) %in% ynames]
-xdata_train <- train %>% dplyr::select(SST, SSAL, depth, month, region)
-ydata_train <- ydata_train[,colSums(ydata_train != 0) > 10] # I want non-zero rows 
-ynames <- colnames(ydata_train)
-
- ml <- list(ng = 20000, burnin = 8000, typeNames = 'CA')
-
- mod2 <- gjam(~ SST + SSAL + depth + month + region, xdata = xdata_train, ydata = ydata_train, modelList = ml) #removed effort 
- 
- save(mod2, file='Models/dolphin_offshore_3.Rdata')
-plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
-gjamPlot(mod2, plotPars=plotPars)
-
-# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
-# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
-# gjamPlot(mod_spring, plotPars=plotPars)
-xdata_test <- test %>% dplyr::select(SST, SSAL, depth, month, region)
-ydata_test <- test[,colnames(test) %in% ynames]
-
-ycond <- ydata_test[,colnames(ydata_test) %!in% "AbdPerArea"]
-
-
-newdata1 <- list(xdata = xdata_test, ydataCond = ycond, nsim = 1000) # conditionally predict in-sample
-
-p6      <- gjamPredict(mod2, newdata = newdata1)
-pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
-obs_dolph <- ydata_test[,colnames(ydata_test) %in% "AbdPerArea"]#observed dolph
-colnames(obs_dolph) <- "obs_dolph"
-
-newdata <- list(xdata = xdata_test, nsim = 1000) # unconditionally prediction- in-sample
-
-p7      <- gjamPredict(mod2, newdata = newdata)
-pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
-pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
-
-dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
-dat <- as.data.frame(dat)
-
-r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
-r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
-rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
-rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
-rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
-
-rmse_con_fall #from conditonal
-rmse_uncon_fall #from gjam predict
-rmse_uncon2_fall #from gjam
-
-sub <- paste("R2 =", round(r2_con_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-
-p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
-
-sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
-sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
-sub3 <- paste(sub, sub2)
-
-p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
-  geom_abline(linetype=2) +
-  scale_color_gradientn(colours = pal) +  
-  theme_Publication() +
-  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
-  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
-  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
-    
-p <- grid.arrange(p1, p2, nrow = 1)
-ggsave(filename= "Figures/cond_uncond_evensmaller_out_of_sample.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
-
-
-
-```
 
 ###SSDM prediction 
 try some observed vs. predicted with single species models with kingfish added and not 
@@ -1840,7 +2058,7 @@ mod_base <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) , d
 
 mod_king <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + WEAKFISH + NORTHERN.SEAROBIN + SILVER.HAKE, data = offshore)
 
-xdata <- offshore %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, CLEARNOSE.SKATE, SMOOTH.DOGFISH, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE)
+xdata <- offshore %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, CLEARNOSE.SKATE, SMOOTH.DOGFISH, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
 
 pred_base <- predict(mod_base, newdata = xdata)
 pred_king <- predict(mod_king, newdata = xdata)
@@ -1901,9 +2119,9 @@ test <- offshore[-train_ind, ]
 
 mod_base <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) , data = train)
 
-mod_king <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + NORTHERN.SEAROBIN, data = train)
+mod_king <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + NORTHERN.SEAROBIN + WEAKFISH, data = train)
 
-xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, SMOOTH.DOGFISH, CLEARNOSE.SKATE, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE)
+xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, SMOOTH.DOGFISH, CLEARNOSE.SKATE, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
 
 pred_base <- predict(mod_base, newdata = xdata)
 pred_king <- predict(mod_king, newdata = xdata)
@@ -1944,7 +2162,7 @@ p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_king,y = obs_dolph), size 
   labs(y = expression(paste("Reported Dolphin Abundance/km2")), x = expression(paste("Predicted Dolphin Abundance/km2")),  title = expression(paste("d) Fish added")), subtitle =  sub3, parse = TRUE) 
     
 p3 <- grid.arrange(p1, p2, nrow = 1, top=textGrob("Out-of-sample"))
-ggsave(filename= "Figures/Kingfish_pred_outofsample_coastal.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
+ggsave(filename= "Figures/Kingfish_pred_outofsample_coastal_pa.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
 
 p4 <- grid.arrange(p, p3, nrow = 2, top=textGrob("In-sample"))
 
@@ -1961,9 +2179,9 @@ offshore_pa$AbdPerArea <- ifelse(offshore_pa$AbdPerArea > 0, 1, 0)
 
 mod_base <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month), data = offshore_pa, family = binomial(link = "logit"))
 
-mod_king <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + NORTHERN.SEAROBIN+ SILVER.HAKE, data = offshore_pa, family = binomial(link = "logit"))
+mod_king <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + NORTHERN.SEAROBIN+ SILVER.HAKE+ WEAKFISH, data = offshore_pa, family = binomial(link = "logit"))
 
-xdata <- offshore_pa %>% dplyr::select(SST, SSAL, BSAL, BT,depth, month, SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, SMOOTH.DOGFISH, CLEARNOSE.SKATE, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE)
+xdata <- offshore_pa %>% dplyr::select(SST, SSAL, BSAL, BT,depth, month, SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, SMOOTH.DOGFISH, CLEARNOSE.SKATE, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
 
 pred_base <- predict(mod_base, newdata = xdata, type = "response")
 pred_king <- predict(mod_king, newdata = xdata, type = "response")
@@ -1998,9 +2216,9 @@ test <- offshore_pa[-train_ind, ]
 
 mod_base <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month), data = train, family = binomial(link = "logit"))
 
-mod_king <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + NORTHERN.SEAROBIN + SILVER.HAKE, data = train, family = binomial(link = "logit"))
+mod_king <- glm(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + NORTHERN.SEAROBIN + SILVER.HAKE+ WEAKFISH, data = train, family = binomial(link = "logit"))
 
-xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth, month, SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, SMOOTH.DOGFISH, CLEARNOSE.SKATE, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE)
+xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth, month, SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, SMOOTH.DOGFISH, CLEARNOSE.SKATE, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
 
 pred_base <- predict(mod_base, newdata = xdata, type = "response")
 pred_king <- predict(mod_king, newdata = xdata, type = "response")
@@ -2024,10 +2242,535 @@ PAp4 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("h) Fish added", subtitle = p
 
 PAp5 <- grid.arrange(PAp3, PAp4, nrow = 1, top=textGrob("Out-of-sample"))
 PAp6 <- grid.arrange(PAp, PAp5, nrow = 2, top=textGrob("In-sample"))
-ggsave(filename= "Figures/pred_coastal_pa.jpg", plot=p6, width = 10, height=10, units=c("cm"), dpi=500)
 
 
 p7 <- grid.arrange(p4, PAp6, nrow =1)
 ggsave(filename= "Figures/Figure5.jpg", plot=p7, width = 32, height=20, units=c("cm"), dpi=500)
 
 ```
+
+
+
+###RF
+try some observed vs. predicted with single species models with kingfish added and not 
+```{r}
+
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) , data = offshore, control = cforest_unbiased(ntree= 500))
+
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + WEAKFISH + NORTHERN.SEAROBIN + SILVER.HAKE , data = offshore, control = cforest_unbiased(ntree= 500))
+
+xdata <- offshore %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, CLEARNOSE.SKATE, SMOOTH.DOGFISH, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
+xdata$month <- as.factor(xdata$month)
+
+pred_base <- predict(mod_base, newdata = xdata)
+pred_king <- predict(mod_king, newdata = xdata)
+obs_dolph <- offshore$AbdPerArea
+names(obs_dolph) <- "obs_dolph"
+
+dat <- cbind(pred_base, obs_dolph, pred_king)
+colnames(dat) <- c("pred_base", "obs_dolph", "pred_king")
+dat <- as.data.frame(dat)
+
+dat1 <- dat %>% drop_na()
+r2_base <- r2_general(dat1$pred_base, dat1$obs_dolph)
+r2_king <- r2_general(dat1$pred_king, dat1$obs_dolph)
+rmse_base <-  RMSE_func(actual = dat1$obs_dolph, pred = dat1$pred_base) 
+rmse_king <-  RMSE_func(actual = dat1$obs_dolph, pred = dat1$pred_king) 
+
+
+sub <- paste("R2 =", round(r2_base, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_base, digits = 3))
+sub3 <- paste(sub, sub2)
+
+
+p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_base,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_base))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Abundance/km2")), x = expression(paste("Predicted Dolphin Abundance/km2")),  title = expression(paste("a) Base model")), subtitle =  sub3, parse = TRUE) 
+
+sub <- paste("R2 =", round(r2_king, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_king, digits = 3))
+sub3 <- paste(sub, sub2)
+
+p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_king,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_king))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Abundance/km2")), x = expression(paste("Predicted Dolphin Abundance/km2")),  title = expression(paste("b) Fish added")), subtitle =  sub3, parse = TRUE)
+    
+p <- grid.arrange(p1, p2, nrow = 1)
+
+```
+
+out of sample 
+```{r}
+smp_size <- floor(0.70 * nrow(offshore))
+set.seed(321)
+train_ind <- sample(seq_len(nrow(offshore)), size = smp_size)
+train <- offshore[train_ind, ]
+test <- offshore[-train_ind, ]
+test <- test %>% dplyr::filter(month %in% train$month)
+train <- train %>% dplyr::filter(month %in% test$month)
+
+
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) , data = train, control = cforest_unbiased(ntree= 500))
+
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + WEAKFISH + NORTHERN.SEAROBIN + SILVER.HAKE, data = train, control = cforest_unbiased(ntree= 500))
+
+xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, CLEARNOSE.SKATE, SMOOTH.DOGFISH, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
+
+xdata$month <- as.factor(xdata$month)
+
+pred_base <- predict(mod_base, newdata = xdata)
+pred_king <- predict(mod_king, newdata = xdata)
+obs_dolph <- test$AbdPerArea
+names(obs_dolph) <- "obs_dolph"
+
+dat <- cbind(pred_base, obs_dolph, pred_king)
+dat <- as.data.frame(dat)
+colnames(dat) <- c("pred_base", "obs_dolph", "pred_king")
+
+dat1 <- dat %>% drop_na()
+r2_base <- r2_general(dat1$pred_base, dat1$obs_dolph)
+r2_king <- r2_general(dat1$pred_king, dat1$obs_dolph)
+rmse_base <-  RMSE_func(actual = dat1$obs_dolph, pred = dat1$pred_base) 
+rmse_king <-  RMSE_func(actual = dat1$obs_dolph, pred = dat1$pred_king) 
+
+
+sub <- paste("R2 =", round(r2_base, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_base, digits = 3))
+sub3 <- paste(sub, sub2)
+
+
+p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_base,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_base))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Abundance/km2")), x = expression(paste("Predicted Dolphin Abundance/km2")),  title = expression(paste("c) Base model")), subtitle =  sub3, parse = TRUE) 
+
+sub <- paste("R2 =", round(r2_king, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_king, digits = 3))
+sub3 <- paste(sub, sub2)
+
+p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_king,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_king))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Abundance/km2")), x = expression(paste("Predicted Dolphin Abundance/km2")),  title = expression(paste("d) Fish added")), subtitle =  sub3, parse = TRUE) 
+    
+p3 <- grid.arrange(p1, p2, nrow = 1, top=textGrob("Out-of-sample"))
+
+p4 <- grid.arrange(p, p3, nrow = 2, top=textGrob("In-sample"))
+
+```
+
+
+pa
+```{r}
+offshore_pa <- offshore
+offshore_pa$AbdPerArea <- ifelse(offshore_pa$AbdPerArea > 0, 1, 0)
+
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month), data = offshore_pa, control = cforest_unbiased(ntree= 500))
+
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth  + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + WEAKFISH + NORTHERN.SEAROBIN + SILVER.HAKE, data = offshore_pa, control = cforest_unbiased(ntree= 500))
+
+xdata <- offshore_pa %>% dplyr::select(SST, SSAL, BSAL, BT,depth, month, SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, CLEARNOSE.SKATE, SMOOTH.DOGFISH, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
+
+pred_base <- predict(mod_base, newdata = xdata, type = "response")
+pred_king <- predict(mod_king, newdata = xdata, type = "response")
+obs_dolph <- offshore_pa$AbdPerArea
+names(obs_dolph) <- "obs_dolph"
+
+dat <- cbind(pred_base, obs_dolph, pred_king)
+dat <- as.data.frame(dat)
+colnames(dat) <- c("pred_base", "obs_dolph", "pred_king")
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_base)
+
+PAp1 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("e) Base model", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_king)
+
+PAp2 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("f) Fish added", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+  
+  
+PAp <- grid.arrange(PAp1, PAp2, nrow = 1)
+#ggsave(filename= "Figures/Kingfish_pred_outofsample_offshore_PA.jpg", plot=p, width = 10, height=5, units=c("cm"), dpi=500)
+
+
+smp_size <- floor(0.70 * nrow(offshore_pa))
+set.seed(321)
+train_ind <- sample(seq_len(nrow(offshore_pa)), size = smp_size)
+train <- offshore_pa[train_ind, ]
+test <- offshore_pa[-train_ind, ]
+test <- test %>% dplyr::filter(month %in% train$month)
+train <- train %>% dplyr::filter(month %in% test$month)
+
+
+
+mod_base <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) , data = train, control = cforest_unbiased(ntree= 500))
+
+mod_king <- cforest(AbdPerArea ~ SST + SSAL + BSAL + BT + depth + factor(month) + SPOTTED.HAKE + ROSETTE.SKATE + SMOOTH.DOGFISH + CLEARNOSE.SKATE + ROUND.HERRING + SOUTHERN.KINGFISH + WEAKFISH + NORTHERN.SEAROBIN + SILVER.HAKE, data = train, control = cforest_unbiased(ntree= 500))
+
+xdata <- test %>% dplyr::select(SST, SSAL, BSAL, BT,depth,  month, SPOTTED.HAKE, ROSETTE.SKATE, CLEARNOSE.SKATE, SMOOTH.DOGFISH, ROUND.HERRING, SOUTHERN.KINGFISH, NORTHERN.SEAROBIN, SILVER.HAKE, WEAKFISH)
+xdata$month <- as.factor(xdata$month)
+
+
+pred_base <- predict(mod_base, newdata = xdata, type = "response")
+pred_king <- predict(mod_king, newdata = xdata, type = "response")
+obs_dolph <- test$AbdPerArea
+names(obs_dolph) <- "obs_dolph"
+
+dat <- cbind(pred_base, obs_dolph, pred_king)
+dat <- as.data.frame(dat)
+colnames(dat) <- c("pred_base", "obs_dolph", "pred_king")
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_base)
+
+PAp3 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("g) Base model", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_king)
+
+PAp4 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("h) Fish added", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+PAp5 <- grid.arrange(PAp3, PAp4, nrow = 1, top=textGrob("Out-of-sample"))
+PAp6 <- grid.arrange(PAp, PAp5, nrow = 2, top=textGrob("In-sample"))
+p7 <- grid.arrange(p4, PAp6, nrow =1)
+ggsave(filename= "Figures/supp_RF_offshore.jpg", plot=p7, width = 30, height=20, units=c("cm"), dpi=500)
+
+
+```
+
+
+###conditional 
+just strong cov 
+```{r}
+ynames <- c("SPOTTED.HAKE", "ROSETTE.SKATE", "CLEARNOSE.SKATE", "SMOOTH.DOGFISH", "ROUND.HERRING", "SOUTHERN.KINGFISH", "NORTHERN.SEAROBIN", "SILVER.HAKE", "WEAKFISH", "BLUEFISH")
+specs1 <- ynames
+
+
+xdata_offshore <- offshore %>% dplyr::select(SST, SSAL, depth, month)
+ydata_offshore <- offshore %>% dplyr::select(specs1, AbdPerArea)
+ydata_offshore <- ydata_offshore[,colSums(ydata_offshore != 0) > 17] # I want non-zero rows 
+
+  ml <- list(ng = 600000, burnin = 50000, typeNames = 'CA')
+  
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_offshore, ydata = ydata_offshore, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_offshore_2.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+
+
+
+ycond <- ydata_offshore[,colnames(ydata_offshore) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_offshore, ydataCond = ycond, nsim = 1000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_offshore[,colnames(ydata_offshore) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_offshore, nsim = 1000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+dat <- as.data.frame(dat)
+
+r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
+r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
+rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
+rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
+rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
+
+rmse_con_fall #from conditonal
+rmse_uncon_fall #from gjam predict
+rmse_uncon2_fall #from gjam
+
+sub <- paste("R2 =", round(r2_con_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+
+p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
+
+sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
+    
+p <- grid.arrange(p2, p1, nrow = 1)
+ggsave(filename= "Figures/cond_uncond_smaller.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
+
+
+
+```
+
+out of sample
+
+```{r}
+
+smp_size <- floor(0.70 * nrow(offshore))
+set.seed(321)
+train_ind <- sample(seq_len(nrow(offshore)), size = smp_size)
+train <- offshore[train_ind, ]
+test <- offshore[-train_ind, ]
+
+ynames <- c(specs1, "AbdPerArea")
+ydata_train <- train[,colnames(train) %in% ynames]
+xdata_train <- train %>% dplyr::select(SST, SSAL, depth, month)
+ydata_train <- ydata_train[,colSums(ydata_train != 0) > 5] # I want non-zero rows 
+ynames <- colnames(ydata_train)
+
+ ml <- list(ng = 600000, burnin = 50000, typeNames = 'CA')
+
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_train, ydata = ydata_train, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_offshore_3.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+#gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+xdata_test <- test %>% dplyr::select(SST, SSAL, depth, month, region)
+ydata_test <- test[,colnames(test) %in% ynames]
+
+ycond <- ydata_test[,colnames(ydata_test) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_test, ydataCond = ycond, nsim = 8000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_test[,colnames(ydata_test) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_test, nsim = 8000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+dat <- as.data.frame(dat)
+
+r2_con_fall <- r2_general(dat$pred_dolph_con, dat$obs_dolph)
+r2_uncon_fall <- r2_general(dat$pred_dolph_un, dat$obs_dolph)
+rmse_con_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_con) 
+rmse_uncon_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un) 
+rmse_uncon2_fall <-  RMSE_func(actual = dat$obs_dolph, pred = dat$pred_dolph_un2) 
+
+rmse_con_fall #from conditonal
+rmse_uncon_fall #from gjam predict
+rmse_uncon2_fall #from gjam
+
+sub <- paste("R2 =", round(r2_con_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_con_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+
+p1 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_con,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_con))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Conditional")), subtitle =  sub3, parse = TRUE) 
+
+sub <- paste("R2 =", round(r2_uncon_fall, digits = 3))
+sub2 <- paste("RMSE =", round(rmse_uncon_fall, digits = 3))
+sub3 <- paste(sub, sub2)
+
+p2 <- ggplot()  + geom_point(data = dat, aes(x = pred_dolph_un,y = obs_dolph), size = .2, color = "black")  + 
+  geom_abline(linetype=2) +
+  scale_color_gradientn(colours = pal) +  
+  theme_Publication() +
+  labs(colour = "+/- 1 SD") + theme(aspect.ratio = 1) + 
+  xlim(c(0,max(pred_dolph_un))) + ylim(c(0,max(obs_dolph)))+
+  labs(y = expression(paste("Reported Dolphin Biomass")), x = expression(paste("Predicted Dolphin Biomass")),  title = expression(paste("Unconditional")), subtitle =  sub3, parse = TRUE)
+    
+p3 <- grid.arrange(p2, p1, nrow = 1, top=textGrob("Out-of-sample"))
+
+p4 <- grid.arrange(p, p3, nrow = 2, top=textGrob("In-sample"))
+
+ggsave(filename= "Figures/cond_uncond_evensmaller_out_of_sample.jpg", plot=p, width = 20, height=20, units=c("cm"), dpi=500)
+
+
+
+```
+
+####PA
+```{r}
+offshore_pa <- offshore
+offshore_pa$AbdPerArea <- ifelse(offshore_pa$AbdPerArea > 0, 1, 0)
+
+xdata_offshore_pa <- offshore_pa %>% dplyr::select(SST, SSAL, depth, month)
+ydata_offshore_pa <- offshore_pa %>% dplyr::select(specs1, AbdPerArea)
+ydata_offshore_pa <- ydata_offshore_pa[,colSums(ydata_offshore_pa != 0) > 17] # I want non-zero rows 
+
+ml <- list(ng = 600000, burnin = 50000, typeNames = 'PA')
+
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_offshore_pa, ydata = ydata_offshore_pa, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_offshore_pa_2.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+#gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+
+
+
+ycond <- ydata_offshore_pa[,colnames(ydata_offshore_pa) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_offshore_pa, ydataCond = ycond, nsim = 1000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_offshore_pa[,colnames(ydata_offshore_pa) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_offshore_pa, nsim = 1000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+
+dat <- as.data.frame(dat)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_un)
+
+PAp1 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("e) Base model", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_con)
+
+PAp2 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("f) Fish added", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+  
+  
+PAp <- grid.arrange(PAp1, PAp2, nrow = 1)
+#ggsave(filename= "Figures/Kingfish_pred_outofsample_offshore_PA.jpg", plot=p, width = 10, height=5, units=c("cm"), dpi=500)
+
+
+
+```
+
+out of sample
+
+```{r}
+
+smp_size <- floor(0.70 * nrow(offshore_pa))
+set.seed(321)
+train_ind <- sample(seq_len(nrow(offshore_pa)), size = smp_size)
+train <- offshore_pa[train_ind, ]
+test <- offshore_pa[-train_ind, ]
+
+ynames <- c(specs1, "AbdPerArea")
+ydata_train <- train[,colnames(train) %in% ynames]
+xdata_train <- train %>% dplyr::select(SST, SSAL, depth, month)
+ydata_train <- ydata_train[,colSums(ydata_train != 0) > 5] # I want non-zero rows 
+ynames <- colnames(ydata_train)
+
+ml <- list(ng = 600000, burnin = 50000, typeNames = 'PA')
+
+ mod2 <- gjam(~ SST + SSAL + depth + month, xdata = xdata_train, ydata = ydata_train, modelList = ml) #removed effort 
+ 
+ save(mod2, file='Models/dolphin_offshore_pa_3.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T,outFolder = 'Figures/joint2')
+#gjamPlot(mod2, plotPars=plotPars)
+
+# save(mod_spring, file='Models/dolphin_mod_spring.Rdata')
+# plotPars <- list(PLOTALLY=F, SAVEPLOTS = T, SMALLPLOTS = F, GRIDPLOTS = T, outFolder = 'Figures/Dolphins/spring')
+# gjamPlot(mod_spring, plotPars=plotPars)
+xdata_test <- test %>% dplyr::select(SST, SSAL, depth, month, region)
+ydata_test <- test[,colnames(test) %in% ynames]
+
+ycond <- ydata_test[,colnames(ydata_test) %!in% "AbdPerArea"]
+
+
+newdata1 <- list(xdata = xdata_test, ydataCond = ycond, nsim = 8000) # conditionally predict in-sample
+
+p6      <- gjamPredict(mod2, newdata = newdata1)
+pred_dolph_con <- p6$sdList$yMu[,colnames(p6$sdList$yMu) %in% "AbdPerArea"] #get out dolph
+obs_dolph <- ydata_test[,colnames(ydata_test) %in% "AbdPerArea"]#observed dolph
+colnames(obs_dolph) <- "obs_dolph"
+
+newdata <- list(xdata = xdata_test, nsim = 8000) # unconditionally prediction- in-sample
+
+p7      <- gjamPredict(mod2, newdata = newdata)
+pred_dolph_un <- p7$sdList$yMu[,colnames(p7$sdList$yMu) %in% "AbdPerArea"]
+pred_dolph_un2 <- mod2$prediction$ypredMu[,colnames(mod2$prediction$ypredMu) %in% "AbdPerArea"]
+
+dat <- cbind(pred_dolph_con, obs_dolph, pred_dolph_un)
+dat <- as.data.frame(dat)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_un)
+
+PAp3 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("g) Base model", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+pROC_obj <- roc(response = dat$obs_dolph, predictor = dat$pred_dolph_con)
+
+PAp4 <- ggroc(pROC_obj)+ theme_minimal() + ggtitle("h) Fish added", subtitle = paste("ROC = ", round(pROC_obj$auc, digits = 3))) +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") + theme_Publication() +
+    theme(plot.title = element_text(hjust = .5))+ theme(aspect.ratio = 1)
+
+PAp5 <- grid.arrange(PAp3, PAp4, nrow = 1, top=textGrob("Out-of-sample"))
+PAp6 <- grid.arrange(PAp, PAp5, nrow = 2, top=textGrob("In-sample"))
+p7 <- grid.arrange(p4, PAp6, nrow =1)
+ggsave(filename= "Figures/supp_gjam_offshore1.jpg", plot=p7, width = 30, height=20, units=c("cm"), dpi=500)
+
+```
+
+
+#survey table 
+```{r}
+survey_print <- both %>% group_by(Provider, SurveyName, Platform) %>% tally()
+colnames(survey_print) <- c("Provider", "Survey Name", "Platform", "Grid Points")
+write.csv(survey_print, "survey_print.csv")
+```
+
