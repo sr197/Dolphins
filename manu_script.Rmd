@@ -119,7 +119,7 @@ pal <- wes_palette("Zissou1", 50, type = "continuous")
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
 ```
-
+ss
 #ALL data 
 model dolphins as different ecotypes by coastal vs offshore 
 I think I am controlling for region and month by including them in the models but we shall see 

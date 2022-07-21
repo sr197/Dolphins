@@ -56,7 +56,7 @@ which prey are named different things?
 tallied <- dat %>% group_by(Prey) %>% tally()
 tallied$Prey
 ```
-okay - we need to combine things that are named differently into one prey item. 
+okay - we need to combine things that are named differently into one prey item. This will take a bit
 
 ```{r}
 dat$Prey <- ifelse(dat$Prey == 'anchovies'| dat$Prey == "Fatty acid: anchovy", "anchovy spp (Anchoa spp.)", 
