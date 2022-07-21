@@ -10,7 +10,6 @@ Load important libraries
 ```{r}
 library(tidyverse)
 library(ggplot2)
-library(dplyr)
 library(readxl)
 ```
 
@@ -96,7 +95,7 @@ dat$Prey <- ifelse( dat$Prey == "Illex illecebrosus", "Illex spp.", dat$Prey)
 dat$Prey <- ifelse(dat$Prey == "Labrid", "Labridae", dat$Prey)
                                                                                    
 dat$Prey <- ifelse(dat$Prey == "ladyfish", "ladyfish (Elops saurus)", dat$Prey)
-
+'%!in%' <- function(x,y)!('%in%'(x,y))
 dat <- dat %>% dplyr::filter(Prey %!in% c("fish", "Fish", "Fish (1)"))
 ```
 
