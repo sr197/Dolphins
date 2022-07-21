@@ -26,7 +26,6 @@ clean it up a bit
 ```{r} 
 dat <- dat %>% 
   dplyr::select(-"...1") %>% #remove first column
-  rename(Unique_ID = "...2") %>% #rename column
   filter(!row_number() %in% 1) #remove first row
 
 ```
@@ -34,7 +33,7 @@ dat <- dat %>%
 ##decision point 1
 remove rows where data type was none
 ```{r}
-dat <- dat %>% filter(`Data Type` != c("none", "isotope")) #isotope just tells us what they are similar to 
+dat <- dat %>% filter(`Data Type` != c("none")) #isotope just tells us what they are similar to - should we remove?  
 ```
 
 
@@ -51,6 +50,13 @@ dat <- dat %>%
   mutate_if(is.character, str_trim) #removes whitespace at beginning and end of all characters
 ```
 
+remove that one row that is nothing (there was a ; at the end of a sentance)
+```{r}
+dat <- dat %>%
+  filter(Prey != "") #removes that one row ""
+```
+
+
 which prey are named different things?
 ```{r}
 tallied <- dat %>% group_by(Prey) %>% tally()
@@ -59,19 +65,37 @@ tallied$Prey
 okay - we need to combine things that are named differently into one prey item. This will take a bit
 
 ```{r}
-dat$Prey <- ifelse(dat$Prey == 'anchovies'| dat$Prey == "Fatty acid: anchovy", "anchovy spp (Anchoa spp.)", 
-                   ifelse(dat$Prey == 'and crabs', "crabs", 
-                          ifelse( dat$Prey == 'and oystr toadfish'| dat$Prey == "toadfish (Opsanus tau)", "Oyster toadfish (Opsanus tau)", 
-                                  ifelse(dat$Prey == "Atlantic croaker"| dat$Prey == "croacker"| dat$Prey == "croaker"| dat$Prey == "Croaker Sciaenid", "Atlantic croaker (Micropogonias undulatus)",
-                                         ifelse(dat$Prey == "Bluefish Pomatomus saltatrix", "Bluefish (Pomatomus saltatrix)", 
-                                                ifelse(dat$Prey == "brief squid"| dat$Prey == "Brief squid Lolliguncula brevis", "Atlantic brief squid (Lolliguncula brevis)", 
-                                                       ifelse(dat$Prey == "Congridae Conger", "Conger eel (Conger oceanicus)", 
-                                                              ifelse(dat$Prey == "Decapoda \"Shrimp\""| dat$Prey == "Shrimp Pernaeus sp.", "shrimp", 
-                                                                     ifelse(dat$Prey == "Enoploteuthis sp.", "Enoploteuthis",
-                                                                            ifelse(dat$Prey == "grunt"| dat$Prey == "Grunt Haemulid"| dat$Prey == "Haemulon", "Grunt Haemulon sp.", 
-                                                                                   ifelse(dat$Prey == "hakee spp. (Urophycis spp.)", "Hake (Urophycis sp.)", ifelse(dat$Prey == "Histioteuthis", "Histioteuthis cr H. miranda", ifelse( dat$Prey == "Illex illecebrosus", "Illex spp.", ifelse(dat$Prey == "Labrid", "Labridae", ifelse(dat$Prey == "ladyfish", "ladyfish (Elops saurus)", dat$Prey)))))))))))))))
+dat$Prey <- ifelse(dat$Prey == 'anchovies'| dat$Prey == "Fatty acid: anchovy", "anchovy spp (Anchoa spp.)", dat$Prey)
 
- dat <- dat %>% dplyr::filter(Prey %!in% c("fish", "Fish", "Fish (1)"))
+dat$Prey <- ifelse(dat$Prey == 'and crabs', "crabs", dat$Prey)
+
+dat$Prey <- ifelse( dat$Prey == 'and oystr toadfish'| dat$Prey == "toadfish (Opsanus tau)", "Oyster toadfish (Opsanus tau)", dat$Prey)
+
+dat$Prey <- ifelse(dat$Prey == "Atlantic croaker"| dat$Prey == "croacker"| dat$Prey == "croaker"| dat$Prey == "Croaker Sciaenid", "Atlantic croaker (Micropogonias undulatus)",dat$Prey)
+
+dat$Prey <- ifelse(dat$Prey == "Bluefish Pomatomus saltatrix", "Bluefish (Pomatomus saltatrix)",dat$Prey) 
+
+dat$Prey <- ifelse(dat$Prey == "brief squid"| dat$Prey == "Brief squid Lolliguncula brevis", "Atlantic brief squid (Lolliguncula brevis)", dat$Prey)
+
+dat$Prey <- ifelse(dat$Prey == "Congridae Conger", "Conger eel (Conger oceanicus)", dat$Prey)
+
+dat$Prey <- ifelse(dat$Prey == "Decapoda \"Shrimp\""| dat$Prey == "Shrimp Pernaeus sp.", "shrimp",dat$Prey) 
+
+dat$Prey <- ifelse(dat$Prey == "Enoploteuthis sp.", "Enoploteuthis",dat$Prey)
+                                                                            
+dat$Prey <- ifelse(dat$Prey == "grunt"| dat$Prey == "Grunt Haemulid"| dat$Prey == "Haemulon", "Grunt Haemulon sp.", dat$Prey)
+                                                                                   
+dat$Prey <- ifelse(dat$Prey == "hakee spp. (Urophycis spp.)", "Hake (Urophycis sp.)", dat$Prey)
+                                                                                   
+dat$Prey <- ifelse(dat$Prey == "Histioteuthis", "Histioteuthis cr H. miranda", dat$Prey)
+                                                                                   
+dat$Prey <- ifelse( dat$Prey == "Illex illecebrosus", "Illex spp.", dat$Prey)
+                                                                                   
+dat$Prey <- ifelse(dat$Prey == "Labrid", "Labridae", dat$Prey)
+                                                                                   
+dat$Prey <- ifelse(dat$Prey == "ladyfish", "ladyfish (Elops saurus)", dat$Prey)
+
+dat <- dat %>% dplyr::filter(Prey %!in% c("fish", "Fish", "Fish (1)"))
 ```
 
 probably should create a column called species order
@@ -81,5 +105,5 @@ probably should create a column called species order
 dat %>% 
   dplyr::filter(Ecotype == "Coastal")%>% 
   ggplot(aes(x=Prey)) + 
-  geom_bar(aes(y = ..count..)) + theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))
+  geom_bar(aes(y = ..count..)) + theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) + facet_wrap(~Region)
 ```
