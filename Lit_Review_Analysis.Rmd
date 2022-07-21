@@ -10,6 +10,7 @@ Load important libraries
 ```{r}
 library(tidyverse)
 library(ggplot2)
+library(dplyr)
 ```
 
 
