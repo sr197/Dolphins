@@ -5,26 +5,81 @@ date: "7/1/2022"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+#1. Prep
+Load important libraries 
+```{r}
+library(tidyverse)
+library(ggplot2)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
+load data 
+```{r}
+dat <- readxl::read_xlsx("Data/DataExtraction_Jacoby.xlsx")
+
+
 ```
 
-## Including Plots
+clean it up a bit
+```{r} 
+dat <- dat %>% 
+  dplyr::select(-"...1") %>% #remove first column
+  rename(Unique_ID = "...2") %>% #rename column
+  filter(!row_number() %in% 1) #remove first row
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+##decision point 1
+remove rows where data type was none
+```{r}
+dat <- dat %>% filter(`Data Type` != c("none", "isotope")) #isotope just tells us what they are similar to 
+```
+
+
+
+clean up prey column to be long format 
+```{r}
+dat$Prey <- gsub(pattern = ',', replacement = ";", x = dat$Prey) #make all commmas semi colon 
+dat <- dat %>% separate_rows(Prey, sep=';')
+```
+
+clean up weird spacing at beg and end of Prey column
+```{r}
+dat <- dat %>%
+  mutate_if(is.character, str_trim) #removes whitespace at beginning and end of all characters
+```
+
+which prey are named different things?
+```{r}
+tallied <- dat %>% group_by(Prey) %>% tally()
+tallied$Prey
+```
+okay - we need to combine things that are named differently into one prey item. 
+
+```{r}
+dat$Prey <- ifelse(dat$Prey == 'anchovies'| dat$Prey == "Fatty acid: anchovy", "anchovy spp (Anchoa spp.)", 
+                   ifelse(dat$Prey == 'and crabs', "crabs", 
+                          ifelse( dat$Prey == 'and oystr toadfish'| dat$Prey == "toadfish (Opsanus tau)", "Oyster toadfish (Opsanus tau)", 
+                                  ifelse(dat$Prey == "Atlantic croaker"| dat$Prey == "croacker"| dat$Prey == "croaker"| dat$Prey == "Croaker Sciaenid", "Atlantic croaker (Micropogonias undulatus)",
+                                         ifelse(dat$Prey == "Bluefish Pomatomus saltatrix", "Bluefish (Pomatomus saltatrix)", 
+                                                ifelse(dat$Prey == "brief squid"| dat$Prey == "Brief squid Lolliguncula brevis", "Atlantic brief squid (Lolliguncula brevis)", 
+                                                       ifelse(dat$Prey == "Congridae Conger", "Conger eel (Conger oceanicus)", 
+                                                              ifelse(dat$Prey == "Decapoda \"Shrimp\""| dat$Prey == "Shrimp Pernaeus sp.", "shrimp", 
+                                                                     ifelse(dat$Prey == "Enoploteuthis sp.", "Enoploteuthis",
+                                                                            ifelse(dat$Prey == "grunt"| dat$Prey == "Grunt Haemulid"| dat$Prey == "Haemulon", "Grunt Haemulon sp.", 
+                                                                                   ifelse(dat$Prey == "hakee spp. (Urophycis spp.)", "Hake (Urophycis sp.)", ifelse(dat$Prey == "Histioteuthis", "Histioteuthis cr H. miranda", ifelse( dat$Prey == "Illex illecebrosus", "Illex spp.", ifelse(dat$Prey == "Labrid", "Labridae", ifelse(dat$Prey == "ladyfish", "ladyfish (Elops saurus)", dat$Prey)))))))))))))))
+
+ dat <- dat %>% dplyr::filter(Prey %!in% c("fish", "Fish", "Fish (1)"))
+```
+
+probably should create a column called species order
+#plotting
+
+```{r}
+dat %>% 
+  dplyr::filter(Ecotype == "Coastal")%>% 
+  ggplot(aes(x=Prey)) + 
+  geom_bar(aes(y = ..count..)) + theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))
+```

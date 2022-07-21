@@ -30,6 +30,11 @@ library(lessR)
 library(ggcorrplot)
 world <- ne_countries(scale = "medium", returnclass = "sf")
 
+library(mapdata)
+library(maps)
+
+usa <- map_data('usa')
+
 remove_outliers <- function(df, cols = names(df)) {
   for (col in cols) {
     df <- df[!outliers(df[[col]]),]
@@ -538,6 +543,58 @@ p3 <- ggarrange(p1,pb, nrow = 1, labels = c("a)","b)"))
 
 ggsave(filename= "Figures/Figure1_north.jpg", plot=p3, width = 25, height=10, units=c("cm"), dpi=500)
 
+```
+check ecotype for Anni 
+
+```{r}
+check <- readxl::read_xlsx("Ecotype_Location_Verification_20220715 (1).xlsx")
+check$Longitude <- ifelse(check$Longitude > 1, check$Longitude*-1, check$Longitude)
+check$ID <- rownames(check)
+
+#label the states 
+
+
+
+check$State <- ifelse(check$Latitude < 34.1, "SC", check$State)
+check$State <- ifelse(check$Latitude > 34.1 & check$Latitude < 37, "NC", check$State)
+check$State <- ifelse(check$Latitude > 36.9 & check$Latitude < 38, "VA", check$State)
+check$State <- ifelse(check$Latitude > 37.9 & check$Latitude < 39, "MD", check$State)
+check$State <- ifelse(check$Latitude >38.9 & check$Latitude < 40, "NJ", check$State)
+check$State <- ifelse(check$Latitude > 40 & check$Longitude < -71, "NY", check$State)
+check$State <- ifelse(check$Latitude > 40 & check$Longitude < -69 & check$Longitude > -71, "MA", check$State)
+check$State <- ifelse(check$Longitude > -68, "New England", check$State)
+
+check$Ecotype <- ifelse(check$Longitude > -68, "Offshore", check$Ecotype)
+
+states <- sf::st_as_sf(maps::map("state", plot = FALSE, fill = TRUE))
+ggplot(data = states) + geom_sf() + geom_point(data=check, aes(x = Longitude, y = Latitude, colour = State)) + geom_text(data=check, aes(x = Longitude, y = Latitude, label = ID)) +
+    coord_sf(xlim=c(-85, -65), ylim=c(25,43), expand = TRUE) 
+
+ggplot(data = states) + geom_sf() + geom_point(data=check, aes(x = Longitude, y = Latitude, colour = ID)) +
+    coord_sf(xlim=c(-85, -65), ylim=c(25,43), expand = TRUE) 
+
+ggplot(data = states) + geom_sf() + geom_point(data =check, aes(x = Longitude, y = Latitude, colour = Ecotype)) +
+    coord_sf(xlim=c(-85, -65), ylim=c(25,43), expand = TRUE)
+
+ggplot(data = states) + geom_sf() + geom_point(data =check, aes(x = Longitude, y = Latitude, colour = State)) +
+    coord_sf(xlim=c(-85, -65), ylim=c(25,43), expand = TRUE)
+
+ggplot(data = states) + geom_sf() + geom_point(data =subset(check, check$ID %in% c(1,2)), aes(x = Longitude, y = Latitude, colour = State)) +
+    coord_sf(xlim=c(-85, -65), ylim=c(25,43), expand = TRUE)
+
+write.csv(check, "anni_coordinates.csv")
+
+#add in bathymetrydata 
+fgdb <- "~/Documents/ClimateOceanPlanning/Datasets/SABMASeafloorHabitats/Data/Seafloor.gdb" 
+library(rgdal)
+subset(ogrDrivers(), grepl("GDB", name))
+fc_list <- ogrListLayers(fgdb)
+print(fc_list)
+fc <- readOGR(dsn=fgdb,layer="Bathymetry")
+summary(fc)
+
+
+fc <- sf::st_read("~/Documents/ClimateOceanPlanning/Datasets/SABMASeafloorHabitats/Data/Seafloor.gdb" , layer = "Bathymetry") 
 ```
 
 ##modeling
