@@ -11,6 +11,42 @@ Load important libraries
 library(tidyverse)
 library(ggplot2)
 library(readxl)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+
+theme_Publication <- function(base_size=12, base_family="Arial") {
+
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(hjust = 0.5),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.key.size= unit(0.5, "cm"),
+               legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(10,5,5,5),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0")
+          ))
+      
+}
+
+Mode <- function(x) {
+ ux <- unique(x)
+ ux[which.max(tabulate(match(x, ux)))]
+}
 ```
 
 
@@ -18,7 +54,7 @@ library(readxl)
 
 load data 
 ```{r}
-dat <- readxl::read_xlsx("Data/DataExtraction_Jacoby.xlsx")
+dat <- readxl::read_xlsx("Data/DataExtraction_Jacoby_20220727_TestforSarah.xlsx")
 
 
 ```
@@ -34,15 +70,15 @@ dat <- dat %>%
 ##decision point 1
 remove rows where data type was none
 ```{r}
-dat <- dat %>% filter(`Data Type` != c("none")) #isotope just tells us what they are similar to - should we remove?  
+dat <- dat %>% filter(Data_Type != c("none")) #isotope just tells us what they are similar to - should we remove?  
 ```
 
 
 
 clean up prey column to be long format 
 ```{r}
-dat$Prey <- gsub(pattern = ',', replacement = ";", x = dat$Prey) #make all commmas semi colon 
-dat <- dat %>% separate_rows(Prey, sep=';')
+
+dat <- dat %>% separate_rows(New_Prey, sep=' ')
 ```
 
 clean up weird spacing at beg and end of Prey column
@@ -51,60 +87,207 @@ dat <- dat %>%
   mutate_if(is.character, str_trim) #removes whitespace at beginning and end of all characters
 ```
 
-remove that one row that is nothing (there was a ; at the end of a sentance)
+#add in prey order 
 ```{r}
-dat <- dat %>%
-  filter(Prey != "") #removes that one row ""
+prey_info <- readxl::read_xlsx("Data/PreyList.xlsx")
+
+dat <- left_join(dat, prey_info, by = c("New_Prey" = "Prey"))
 ```
 
-
-which prey are named different things?
-```{r}
-tallied <- dat %>% group_by(Prey) %>% tally()
-tallied$Prey
-```
-okay - we need to combine things that are named differently into one prey item. This will take a bit
-
-```{r}
-dat$Prey <- ifelse(dat$Prey == 'anchovies'| dat$Prey == "Fatty acid: anchovy", "anchovy spp (Anchoa spp.)", dat$Prey)
-
-dat$Prey <- ifelse(dat$Prey == 'and crabs', "crabs", dat$Prey)
-
-dat$Prey <- ifelse( dat$Prey == 'and oystr toadfish'| dat$Prey == "toadfish (Opsanus tau)", "Oyster toadfish (Opsanus tau)", dat$Prey)
-
-dat$Prey <- ifelse(dat$Prey == "Atlantic croaker"| dat$Prey == "croacker"| dat$Prey == "croaker"| dat$Prey == "Croaker Sciaenid", "Atlantic croaker (Micropogonias undulatus)",dat$Prey)
-
-dat$Prey <- ifelse(dat$Prey == "Bluefish Pomatomus saltatrix", "Bluefish (Pomatomus saltatrix)",dat$Prey) 
-
-dat$Prey <- ifelse(dat$Prey == "brief squid"| dat$Prey == "Brief squid Lolliguncula brevis", "Atlantic brief squid (Lolliguncula brevis)", dat$Prey)
-
-dat$Prey <- ifelse(dat$Prey == "Congridae Conger", "Conger eel (Conger oceanicus)", dat$Prey)
-
-dat$Prey <- ifelse(dat$Prey == "Decapoda \"Shrimp\""| dat$Prey == "Shrimp Pernaeus sp.", "shrimp",dat$Prey) 
-
-dat$Prey <- ifelse(dat$Prey == "Enoploteuthis sp.", "Enoploteuthis",dat$Prey)
-                                                                            
-dat$Prey <- ifelse(dat$Prey == "grunt"| dat$Prey == "Grunt Haemulid"| dat$Prey == "Haemulon", "Grunt Haemulon sp.", dat$Prey)
-                                                                                   
-dat$Prey <- ifelse(dat$Prey == "hakee spp. (Urophycis spp.)", "Hake (Urophycis sp.)", dat$Prey)
-                                                                                   
-dat$Prey <- ifelse(dat$Prey == "Histioteuthis", "Histioteuthis cr H. miranda", dat$Prey)
-                                                                                   
-dat$Prey <- ifelse( dat$Prey == "Illex illecebrosus", "Illex spp.", dat$Prey)
-                                                                                   
-dat$Prey <- ifelse(dat$Prey == "Labrid", "Labridae", dat$Prey)
-                                                                                   
-dat$Prey <- ifelse(dat$Prey == "ladyfish", "ladyfish (Elops saurus)", dat$Prey)
-'%!in%' <- function(x,y)!('%in%'(x,y))
-dat <- dat %>% dplyr::filter(Prey %!in% c("fish", "Fish", "Fish (1)"))
-```
-
-probably should create a column called species order
 #plotting
 
+by family and region 
 ```{r}
-dat %>% 
-  dplyr::filter(Ecotype == "Coastal")%>% 
-  ggplot(aes(x=Prey)) + 
-  geom_bar(aes(y = ..count..)) + theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) + facet_wrap(~Region)
+#try a trick to reorder each individual facet
+plot_dat <- dat %>% group_by(Ecotype, Region, Prey_Species, Prey_Family) %>% tally()
+
+plot_dat %>% 
+  dplyr::filter(Ecotype != "Unknown") %>%
+  ggplot(aes(reorder_within(Prey_Family, n, Region), n)) +
+   geom_bar(stat = 'identity') +
+  scale_x_reordered() +
+  facet_wrap(~ Region, scales = "free_y")+
+    coord_flip()
+
+plot_dat %>% 
+  dplyr::filter(Ecotype != "Unknown" & Prey_Family != "NA") %>%
+  ggplot(aes(reorder_within(Prey_Family, n, list(Ecotype, Region)), n)) +
+   geom_bar(stat = 'identity') +
+  scale_x_reordered() +
+  facet_wrap(~ Ecotype + Region, scales = "free")+ theme_Publication()+
+    coord_flip() + ggtitle("Dominant Prey Family by Ecotype and Region")
+
+
+#try it as a proportion 
+plot_dat <- dat %>% 
+  group_by(Ecotype, Region, Prey_Family) %>% 
+  summarise(n = n()) %>% 
+  mutate(freq = (n/sum(n))*100)
+  
+p <- plot_dat %>% 
+  dplyr::filter(Ecotype != "Unknown") %>%
+  ggplot(aes(reorder_within(Prey_Family, freq, list(Ecotype, Region)), freq)) +
+   geom_bar(stat = 'identity', fill = "orange") +
+  scale_x_reordered() +
+  facet_wrap(~ Ecotype + Region, scales = "free_y")+
+    labs(y = "Percentage of studies", x = "Prey Family", lab.nb.digits=1, orientation = "horiz", lab.size = 7, lab.hjust=-1, xlim=c(0,100))+ theme_Publication()+
+    coord_flip() + ggtitle("Dominant Prey Family by Ecotype and Region")
+p
+ggsave(filename= "Figures/Lit_review_Family_Region_all.jpg", plot=p, width = 40, height=20, units=c("cm"), dpi=500)
+
+
+#just get out the top 10 or so 
+p <- plot_dat %>% top_n(10, wt = freq) %>% 
+  dplyr::filter(Ecotype != "Unknown") %>%
+  ggplot(aes(reorder_within(Prey_Family, freq, list(Ecotype, Region)), freq)) +
+   geom_bar(stat = 'identity', fill = "orange") +
+  scale_x_reordered() +
+  facet_wrap(~ Ecotype + Region, scales = "free_y")+
+    labs(y = "Percentage of studies", x = "Prey Family", lab.nb.digits=1, orientation = "horiz", lab.size = 7, lab.hjust=-1, xlim=c(0,100))+ theme_Publication()+
+    coord_flip() + ggtitle("Top 10 Prey Family by Ecotype and Region")
+p
+ggsave(filename= "Figures/Lit_review_Family_Region_10.jpg", plot=p, width = 40, height=20, units=c("cm"), dpi=500)
+
+```
+
+by family and location (state)
+
+```{r}
+plot_dat <- dat %>% 
+  group_by(Ecotype, Location, Prey_Family) %>% 
+  summarise(n = n()) %>% 
+  mutate(freq = (n/sum(n))*100)
+  
+p <- plot_dat %>% 
+  dplyr::filter(Ecotype != "Unknown") %>%
+  ggplot(aes(reorder_within(Prey_Family, freq, list(Ecotype, Location)), freq)) +
+   geom_bar(stat = 'identity', fill = "orange") +
+  scale_x_reordered() +
+  facet_wrap(~ Ecotype + Location, scales = "free_y")+
+    labs(y = "Percentage of studies", x = "Prey Family", lab.nb.digits=1, orientation = "horiz", lab.size = 7, lab.hjust=-1, xlim=c(0,100))+ theme_Publication()+
+    coord_flip() + ggtitle("Dominant Prey Family by Ecotype and Location")
+p
+ggsave(filename= "Figures/Lit_review_Family_Location_all.jpg", plot=p, width = 40, height=20, units=c("cm"), dpi=500)
+
+#just get out the top 10 or so 
+p <- plot_dat %>% top_n(10, wt = freq) %>% 
+  dplyr::filter(Ecotype != "Unknown") %>%
+  ggplot(aes(reorder_within(Prey_Family, freq, list(Ecotype, Location)), freq)) +
+   geom_bar(stat = 'identity', fill = "orange") +
+  scale_x_reordered() +
+  facet_wrap(~ Ecotype + Location, scales = "free_y")+
+    labs(y = "Percentage of studies", x = "Prey Family", lab.nb.digits=1, orientation = "horiz", lab.size = 7, lab.hjust=-1, xlim=c(0,100))+ theme_Publication()+
+    coord_flip() + ggtitle("Top 10 Prey Family by Ecotype and Location")
+p
+ggsave(filename= "Figures/Lit_review_Family_Location_10.jpg", plot=p, width = 40, height=20, units=c("cm"), dpi=500)
+
+```
+
+by species and region 
+```{r}
+#do top species by region 
+plot_dat <- dat %>% 
+  group_by(Ecotype, Region, Prey_Species) %>% 
+  summarise(n = n()) %>% 
+  mutate(freq = (n/sum(n))*100)
+
+p <- plot_dat %>% 
+  dplyr::filter(Ecotype != "Unknown") %>%
+  ggplot(aes(reorder_within(Prey_Species, freq, list(Ecotype, Region)), freq)) +
+   geom_bar(stat = 'identity', fill = "orange") +
+  scale_x_reordered() +
+  facet_wrap(~ Ecotype + Region, scales = "free_y")+
+    labs(y = "Percentage of studies", x = "Prey Species", lab.nb.digits=1, orientation = "horiz", lab.size = 7, lab.hjust=-1, xlim=c(0,100))+ theme_Publication()+
+    coord_flip() + ggtitle("Dominant Prey Species by Ecotype and Region")
+p
+ggsave(filename= "Figures/Lit_review_Species_Region_all.jpg", plot=p, width = 40, height=20, units=c("cm"), dpi=500)
+
+#just get out the top 10 or so 
+p <- plot_dat %>% top_n(10, wt = freq) %>% 
+  dplyr::filter(Ecotype != "Unknown") %>%
+  ggplot(aes(reorder_within(Prey_Species, freq, list(Ecotype, Region)), freq)) +
+   geom_bar(stat = 'identity', fill = "orange") +
+  scale_x_reordered() +
+  facet_wrap(~ Ecotype + Region, scales = "free_y")+
+    labs(y = "Percentage of studies", x = "Prey Species", lab.nb.digits=1, orientation = "horiz", lab.size = 7, lab.hjust=-1, xlim=c(0,100))+ theme_Publication()+
+    coord_flip() + ggtitle("Top 10 Prey Species by Ecotype and Region")
+p
+ggsave(filename= "Figures/Lit_review_Species_Region_10.jpg", plot=p, width = 40, height=20, units=c("cm"), dpi=500)
+```
+
+#summary stats 
+how many studies were there, how many for each ecotype, region, how many identified to what level 
+
+Okay - we need to talk about what we want to summarise here because some studies are associated with multiple regions or multiple 
+```{r}
+dat_orig <- readxl::read_xlsx("Data/DataExtraction_Jacoby_20220727_TestforSarah.xlsx")
+dat_orig <- dat_orig %>% 
+  dplyr::select(-"...1") %>% #remove first column
+  filter(!row_number() %in% 1) #remove first row
+
+dat_orig <- dat_orig %>% filter(Data_Type != c("none"))
+dat_orig <- dat_orig %>% dplyr::select(-Old_Prey, -New_Prey)
+
+#so we could read this as there were at least 4 studies that focused on the east coast (while some studies could focus on both the east coast and mid atlantic)
+summary(as.factor(dat_orig$Region))
+summary(as.factor(dat_orig$Ecotype))
+summary(as.factor(dat_orig$Data_Type))
+
+#nope, because what if it is counting one study twice 
+
+#okay this might just do it 
+Data_Type <- dat_orig %>% group_by(Data_Type) %>% summarise(Number_of_Studies = n_distinct(ID))
+Region <- dat_orig %>% group_by(Region) %>% summarise(Number_of_Studies = n_distinct(ID))
+Ecotype <- dat_orig %>% group_by(Ecotype) %>% summarise(Number_of_Studies = n_distinct(ID))
+Level <- dat %>% group_by(Prey_Classification)%>% summarise(Number_of_Studies = n_distinct(ID))
+Level[is.na(Level)] <- "None"
+Source <- dat_orig %>% group_by(Source) %>% summarise(Number_of_Studies = n_distinct(ID))
+
+#something can be in two groups - which is why the sums dont add up! 
+n_distinct(dat_orig$ID)
+sum(Data_Type$Number_of_Studies)
+sum(Region$Number_of_Studies)
+sum(Ecotype$Number_of_Studies)
+sum(Source$Number_of_Studies)
+sum(Level$Number_of_Studies)
+
+#plot those things out 
+
+p1 <- Data_Type %>% 
+  ggplot(aes(reorder(Data_Type, Number_of_Studies), Number_of_Studies)) +
+   geom_bar(stat = 'identity') +
+  scale_x_reordered()+ theme_Publication()+
+    labs(y = "Number of Studies", x = "Data Type")+
+    coord_flip()
+
+p2 <- Region %>% 
+  ggplot(aes(reorder(Region, Number_of_Studies), Number_of_Studies)) +
+   geom_bar(stat = 'identity') +
+  scale_x_reordered()+ theme_Publication()+
+    labs(y = "Number of Studies", x = "Region")+
+    coord_flip()
+
+p3 <- Ecotype %>% 
+  ggplot(aes(reorder(Ecotype, Number_of_Studies), Number_of_Studies)) +
+   geom_bar(stat = 'identity') +
+  scale_x_reordered()+ theme_Publication()+
+    labs(y = "Number of Studies", x = "Ecotype")+
+    coord_flip()
+
+p4 <- Level %>% 
+  ggplot(aes(reorder(Prey_Classification, Number_of_Studies), Number_of_Studies)) +
+   geom_bar(stat = 'identity') +
+  scale_x_reordered()+ theme_Publication()+
+    labs(y = "Number of Studies", x = "Classification Level")+
+    coord_flip()
+
+p5 <- Source %>% 
+  ggplot(aes(reorder(Source, Number_of_Studies), Number_of_Studies)) +
+   geom_bar(stat = 'identity') +
+  scale_x_reordered()+ theme_Publication()+
+    labs(y = "Number of Studies", x = "Source")+
+    coord_flip()
+
+a <- grid.arrange(p1, p2, p3, p4, p5, nrow = 2)
+ggsave(filename= "Figures/Lit_review_stats.jpg", plot=a, width = 30, height=20, units=c("cm"), dpi=500)
 ```
